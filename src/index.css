@@ -1,0 +1,276 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Surfaces */
+    --background: 150 24% 97.5%;
+    --foreground: 158 40% 9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 158 40% 9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 158 40% 9%;
+
+    /* Brand */
+    --primary: 152 62% 23%;
+    --primary-foreground: 0 0% 100%;
+    --primary-soft: 152 42% 92%;
+
+    --secondary: 150 26% 94%;
+    --secondary-foreground: 158 40% 15%;
+
+    --muted: 150 20% 95%;
+    --muted-foreground: 156 10% 43%;
+
+    --accent: 152 44% 93%;
+    --accent-foreground: 152 62% 18%;
+
+    /* Status */
+    --destructive: 355 72% 47%;
+    --destructive-foreground: 0 0% 100%;
+
+    --overlay: 158 35% 10%;
+    --success: 152 58% 32%;
+    --success-foreground: 0 0% 100%;
+    --warning: 34 92% 45%;
+    --warning-foreground: 30 60% 14%;
+    --info: 205 78% 42%;
+    --info-foreground: 0 0% 100%;
+
+    /* Lines & focus */
+    --border: 152 16% 89%;
+    --input: 152 16% 88%;
+    --ring: 152 62% 30%;
+
+    /* Charts */
+    --chart-1: 152 56% 30%;
+    --chart-2: 152 44% 62%;
+    --chart-3: 34 88% 57%;
+    --chart-4: 199 62% 46%;
+
+    /* Sidebar */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 156 22% 28%;
+    --sidebar-accent: 152 42% 94%;
+    --sidebar-accent-foreground: 152 62% 18%;
+    --sidebar-border: 152 16% 91%;
+
+    --radius: 1rem;
+
+    /* Effects */
+    --gradient-page: radial-gradient(
+        900px 460px at 88% -8%,
+        hsl(152 46% 90% / 0.85),
+        transparent 70%
+      ),
+      radial-gradient(700px 420px at 4% 0%, hsl(150 40% 95%), transparent 68%);
+    --gradient-primary: linear-gradient(
+      135deg,
+      hsl(152 62% 20%),
+      hsl(150 52% 33%)
+    );
+    --gradient-mint: linear-gradient(
+      180deg,
+      hsl(152 44% 96%),
+      hsl(0 0% 100%)
+    );
+    --shadow-card: 0 1px 2px hsl(160 40% 8% / 0.04),
+      0 18px 34px -24px hsl(160 40% 8% / 0.22);
+    --shadow-raised: 0 2px 4px hsl(160 40% 8% / 0.05),
+      0 24px 48px -28px hsl(160 40% 8% / 0.3);
+    --shadow-glow: 0 10px 26px -12px hsl(152 62% 23% / 0.5);
+    --transition-smooth: all 0.24s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .dark {
+    --background: 160 24% 7%;
+    --foreground: 150 30% 96%;
+
+    --card: 160 20% 10%;
+    --card-foreground: 150 30% 96%;
+
+    --popover: 160 20% 10%;
+    --popover-foreground: 150 30% 96%;
+
+    --primary: 150 48% 52%;
+    --primary-foreground: 160 40% 8%;
+    --primary-soft: 160 24% 16%;
+
+    --secondary: 160 16% 16%;
+    --secondary-foreground: 150 30% 96%;
+
+    --muted: 160 16% 15%;
+    --muted-foreground: 152 10% 65%;
+
+    --accent: 160 20% 18%;
+    --accent-foreground: 150 40% 92%;
+
+    --destructive: 355 62% 46%;
+    --destructive-foreground: 0 0% 100%;
+
+    --overlay: 160 40% 3%;
+    --success: 150 46% 48%;
+    --success-foreground: 160 40% 8%;
+    --warning: 34 80% 55%;
+    --warning-foreground: 30 60% 10%;
+    --info: 205 70% 55%;
+    --info-foreground: 160 40% 8%;
+
+    --border: 160 14% 20%;
+    --input: 160 14% 22%;
+    --ring: 150 48% 46%;
+
+    --chart-1: 150 48% 52%;
+    --chart-2: 152 34% 42%;
+    --chart-3: 34 80% 58%;
+    --chart-4: 199 58% 55%;
+
+    --sidebar-background: 160 22% 9%;
+    --sidebar-foreground: 150 20% 88%;
+    --sidebar-accent: 160 18% 17%;
+    --sidebar-accent-foreground: 150 40% 94%;
+    --sidebar-border: 160 14% 18%;
+
+    --gradient-page: radial-gradient(
+        900px 460px at 88% -8%,
+        hsl(160 30% 15%),
+        transparent 70%
+      ),
+      radial-gradient(700px 420px at 4% 0%, hsl(160 26% 11%), transparent 68%);
+    --gradient-primary: linear-gradient(
+      135deg,
+      hsl(150 48% 40%),
+      hsl(152 40% 52%)
+    );
+    --gradient-mint: linear-gradient(180deg, hsl(160 22% 12%), hsl(160 20% 10%));
+    --shadow-card: 0 1px 2px hsl(0 0% 0% / 0.4),
+      0 18px 34px -24px hsl(0 0% 0% / 0.7);
+    --shadow-raised: 0 2px 4px hsl(0 0% 0% / 0.4),
+      0 24px 48px -28px hsl(0 0% 0% / 0.8);
+    --shadow-glow: 0 10px 26px -12px hsl(150 48% 40% / 0.6);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv11", "ss01";
+    font-variation-settings: "opsz" 28;
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.16);
+  }
+}
+
+@layer utilities {
+  .page-wash {
+    background-image: var(--gradient-page);
+    background-repeat: no-repeat;
+    background-size: 100% 620px;
+  }
+
+  .page-backdrop {
+    background-color: hsl(var(--background));
+    background-image: linear-gradient(
+        180deg,
+        hsl(var(--background) / 0.18),
+        hsl(var(--background) / 0.46)
+      ),
+      url("/images/veticare-background.jpg");
+    background-repeat: no-repeat;
+    background-position: center top;
+    background-size: cover;
+    background-attachment: fixed;
+  }
+
+  .surface-card {
+    box-shadow: var(--shadow-card);
+  }
+
+  .surface-raised {
+    box-shadow: var(--shadow-raised);
+  }
+
+  .brand-gradient {
+    background-image: var(--gradient-primary);
+  }
+
+  .num {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+
+  .fade-up {
+    animation: fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .scan-line {
+    animation: scan-line 2.6s ease-in-out infinite;
+  }
+
+  .scroll-slim {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+
+  .scroll-slim::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scroll-slim::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 999px;
+  }
+}
+
+@keyframes scan-line {
+  0%,
+  100% {
+    top: 14%;
+    opacity: 0.35;
+  }
+  50% {
+    top: 82%;
+    opacity: 1;
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dark .page-backdrop {
+  background-image: var(--gradient-page);
+  background-size: 100% 620px;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+}
+
+#root {
+  min-height: 100vh;
+}

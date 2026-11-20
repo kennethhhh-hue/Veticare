@@ -1,0 +1,4 @@
+project_id = "spb-t4ns8l4932236j58"
+
+[functions.admin-users]
+verify_jwt = true
