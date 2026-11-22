@@ -1,82 +1,42 @@
-# Welcome to your Enter project
+# Veticare
 
-[![Built with enter.pro](https://img.shields.io/badge/Build%20with-Enter.pro-FC5776?style=for-the-badge&labelColor=1F1F1F)](https://enter.pro)
+Veticare is a veterinary clinic and pet-care management system for Batangas City. It supports pet-owner registration, pet identification, veterinary and shelter workflows, adoptions, and administration.
 
-*Automatically synced with your [enter.pro](https://enter.pro) workspace* 
+## Tech Stack
 
----
+- React, TypeScript, and Vite
+- Tailwind CSS and Radix UI
+- Supabase Auth, PostgreSQL, Storage, and Row Level Security
+- pnpm
 
-## Overview
+## Local Development
 
-This repository is automatically linked to your app on [enter.pro](https://enter.pro).  
-Every change you make in Enter will be reflected here — and any updates you push to this repo will sync back seamlessly.  
-
-Enter.pro helps you **build, edit, and deploy full-stack web apps by prompting**.  
-Just describe what you want — Enter turns ideas into production-ready code.
-
----
-
-## Project URLs
-
-**Live app:** https://<project-id>-latest.preview.enter.pro  
-**Edit & build in Enter:** https://enter.pro/project/<project-id>
-
-
----
-
-## Continue building
-
-Keep developing your app directly in [Enter.pro](https://enter.pro/project/<project-id>).  
-Prompt new features, refine the UI, or connect integrations — all changes are versioned and synced automatically to GitHub.
-
----
-
-## Local development
-
-Prefer to work locally? You can clone this repo and start developing right away:
+Requirements: Node.js and pnpm.
 
 ```bash
-# Step 1: Clone your project repository
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate into the project folder
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install all dependencies
 pnpm install
-
-# Step 4: Start the local development server
 pnpm dev
 ```
 
-Push your commits — Enter.pro will automatically detect and sync your latest changes.
+Create a `.env.local` file with the Supabase project URL and publishable client key:
 
----
+```dotenv
+VITE_SUPABASE_URL=https://YOUR_PROJECT_ID.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=YOUR_SUPABASE_PUBLISHABLE_KEY
+```
 
-## Multi-language (i18n)
+Do not put a Supabase service-role key in frontend environment variables.
 
-This template ships without i18n. When the app needs more than one language, ask Enter for it: the agent turns on the Enter i18n extension, and the built-in `enter_i18n` skill injects the runtime (`i18n.config.json`, `public/locales/`, `src/i18n/`, the language switcher, and the i18next dependencies) into this repository.
+## Build
 
----
+```bash
+pnpm run build:prod
+```
 
-## Tech stack
-
-This project uses:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
----
+The production build is written to `dist/`.
 
 ## Deployment
 
-To deploy, open your Enter.pro project and click "Publish"
+Deploy the Vite frontend to Vercel with `pnpm install --frozen-lockfile` as the install command, `pnpm run build:prod` as the build command, and `dist` as the output directory. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` in the Vercel project environment variables, then redeploy.
 
-Your app will automatically build and go live at your production URL.
-
----
-
-✨ Keep prompting, keep building — Enter.pro handles the rest.
+Database migrations and Supabase Edge Functions are deployed separately from the Vercel frontend.

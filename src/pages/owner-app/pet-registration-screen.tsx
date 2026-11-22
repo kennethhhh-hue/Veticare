@@ -1,8 +1,9 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
-import { ArrowLeft, ImagePlus, PawPrint } from "lucide-react";
+import { ArrowLeft, ImagePlus, PawPrint, UploadCloud, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { OwnerPet } from "@/data/owner-app";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -23,6 +24,8 @@ export function PetRegistrationScreen({ onBack, onCreated }: PetRegistrationScre
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [photoPreviewOpen, setPhotoPreviewOpen] = useState(false);
 
   useEffect(() => {
     if (!photo) {
@@ -37,6 +40,7 @@ export function PetRegistrationScreen({ onBack, onCreated }: PetRegistrationScre
   const handlePhotoChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
     setError(null);
+    setUploadProgress(null);
     if (file && !["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
       setPhoto(null);
       setError("Choose a JPG, PNG, or WebP image.");
@@ -56,10 +60,12 @@ export function PetRegistrationScreen({ onBack, onCreated }: PetRegistrationScre
     event.preventDefault();
     setError(null);
     setSaving(true);
+    setUploadProgress(photo ? 0 : null);
 
     const { data: userData, error: userError } = await supabase.auth.getUser();
     if (userError || !userData.user) {
       setSaving(false);
+      setUploadProgress(null);
       setError("Your session expired. Please sign in again.");
       return;
     }
@@ -69,12 +75,49 @@ export function PetRegistrationScreen({ onBack, onCreated }: PetRegistrationScre
     if (photo) {
       const extension = photo.type === "image/jpeg" ? "jpg" : photo.type.split("/")[1];
       photoPath = `${userData.user.id}/${crypto.randomUUID()}.${extension}`;
-      const { error: uploadError } = await supabase.storage
-        .from("veticare-pet-photos")
-        .upload(photoPath, photo, { contentType: photo.type, cacheControl: "3600" });
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !sessionData.session) {
+        setSaving(false);
+        setUploadProgress(null);
+        setError(sessionError?.message ?? "Your session expired. Please sign in again.");
+        return;
+      }
+      const segments = photoPath.split("/").map(encodeURIComponent).join("/");
+      const storageUrl = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/veticare-pet-photos/${segments}`;
+      const uploadError = await new Promise<string | null>((resolve) => {
+        const request = new XMLHttpRequest();
+        request.open("POST", storageUrl);
+        request.setRequestHeader("Authorization", `Bearer ${sessionData.session.access_token}`);
+        request.setRequestHeader("apikey", import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
+        request.setRequestHeader("Content-Type", photo.type);
+        request.setRequestHeader("Cache-Control", "3600");
+        request.setRequestHeader("x-upsert", "false");
+        request.upload.onprogress = (progressEvent) => {
+          if (progressEvent.lengthComputable) {
+            setUploadProgress(Math.min(99, Math.round((progressEvent.loaded / progressEvent.total) * 100)));
+          }
+        };
+        request.onload = () => {
+          if (request.status >= 200 && request.status < 300) {
+            setUploadProgress(100);
+            resolve(null);
+            return;
+          }
+          try {
+            const response = JSON.parse(request.responseText) as { message?: string; error?: string };
+            resolve(response.message ?? response.error ?? `Photo upload failed (${request.status}).`);
+          } catch {
+            resolve(`Photo upload failed (${request.status}).`);
+          }
+        };
+        request.onerror = () => resolve("Network error while uploading the pet photo.");
+        request.onabort = () => resolve("Photo upload was canceled.");
+        request.send(photo);
+      });
       if (uploadError) {
         setSaving(false);
-        setError(uploadError.message);
+        setUploadProgress(null);
+        setError(uploadError);
         return;
       }
       photoUrl = supabase.storage.from("veticare-pet-photos").getPublicUrl(photoPath).data.publicUrl;
@@ -96,6 +139,7 @@ export function PetRegistrationScreen({ onBack, onCreated }: PetRegistrationScre
     if (insertError) {
       if (photoPath) await supabase.storage.from("veticare-pet-photos").remove([photoPath]);
       setSaving(false);
+      setUploadProgress(null);
       setError(insertError.message);
       return;
     }
@@ -120,6 +164,7 @@ export function PetRegistrationScreen({ onBack, onCreated }: PetRegistrationScre
       vaccines: [],
     });
     setSaving(false);
+    setUploadProgress(null);
   };
 
   const fieldClassName = "h-10 rounded-xl border-border bg-background text-[12px]";
@@ -145,20 +190,39 @@ export function PetRegistrationScreen({ onBack, onCreated }: PetRegistrationScre
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2 space-y-1.5">
             <Label htmlFor="pet-photo">Pet photo (optional)</Label>
-            <label htmlFor="pet-photo" className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-border bg-card p-3 hover:bg-secondary/50">
+            <div className="flex items-center gap-3 rounded-xl border border-dashed border-border bg-card p-3">
               {photoPreview ? (
-                <img src={photoPreview} alt="Selected pet" className="size-16 rounded-lg object-cover" />
+                <button
+                  type="button"
+                  onClick={() => setPhotoPreviewOpen(true)}
+                  className="shrink-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  aria-label="Preview selected pet photo"
+                >
+                  <img src={photoPreview} alt="Selected pet" className="size-16 rounded-lg object-cover" />
+                </button>
               ) : (
-                <span className="grid size-16 place-items-center rounded-lg bg-secondary text-muted-foreground">
+                <label htmlFor="pet-photo" className="grid size-16 shrink-0 cursor-pointer place-items-center rounded-lg bg-secondary text-muted-foreground">
                   <ImagePlus className="size-5" />
-                </span>
+                </label>
               )}
-              <span className="min-w-0">
+              <span className="min-w-0 flex-1">
                 <span className="block truncate text-[12px] font-semibold text-foreground">{photo?.name ?? "Choose a pet photo"}</span>
                 <span className="mt-0.5 block text-[10px] text-muted-foreground">JPG, PNG, or WebP, up to 5 MB</span>
               </span>
-            </label>
+              {photo ? <label htmlFor="pet-photo" className="shrink-0 cursor-pointer text-[10px] font-bold text-primary">Change</label> : null}
+            </div>
             <Input id="pet-photo" type="file" accept="image/jpeg,image/png,image/webp" onChange={handlePhotoChange} className="sr-only" />
+            {saving && uploadProgress !== null ? (
+              <div className="space-y-1.5" role="status" aria-live="polite">
+                <div className="flex items-center justify-between text-[10px] font-semibold text-muted-foreground">
+                  <span className="flex items-center gap-1.5"><UploadCloud className="size-3.5" />Uploading photo</span>
+                  <span>{uploadProgress}%</span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-secondary" aria-valuemin={0} aria-valuemax={100} aria-valuenow={uploadProgress} role="progressbar">
+                  <div className="h-full rounded-full bg-primary transition-[width] duration-150" style={{ width: `${uploadProgress}%` }} />
+                </div>
+              </div>
+            ) : null}
           </div>
           <div className="col-span-2 space-y-1.5">
             <Label htmlFor="pet-name">Pet name</Label>
@@ -209,6 +273,19 @@ export function PetRegistrationScreen({ onBack, onCreated }: PetRegistrationScre
           {saving ? "Submitting…" : "Submit pet registration"}
         </Button>
       </form>
+
+      <Dialog open={photoPreviewOpen} onOpenChange={setPhotoPreviewOpen}>
+        <DialogContent className="max-w-[min(92vw,560px)] overflow-hidden rounded-2xl p-3">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Pet photo preview</DialogTitle>
+            <DialogDescription>Preview of the selected pet photo.</DialogDescription>
+          </DialogHeader>
+          {photoPreview ? <img src={photoPreview} alt={`${name || "Selected pet"} photo preview`} className="max-h-[75vh] w-full rounded-xl object-contain" /> : null}
+          <Button type="button" variant="outline" onClick={() => setPhotoPreviewOpen(false)} className="w-full">
+            <X className="size-4" />Close preview
+          </Button>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

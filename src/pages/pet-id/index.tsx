@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   Copy,
-  Eye,
   Fingerprint,
   IdCard,
   PawPrint,
@@ -30,16 +29,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { type PetIdRecord, type PetIdStatus } from "@/data/shelter-records";
 import { supabase } from "@/integrations/supabase/client";
 
-type RegistryPetIdRecord = PetIdRecord & { recordId: string };
+type RegistryPetIdRecord = PetIdRecord & { recordId: string; rfidTag: string | null };
 
 const PAGE_SIZE = 5;
 
@@ -62,7 +56,7 @@ const PetId = () => {
     setLoading(true);
     setLoadError(null);
     const [{ data: pets, error: petsError }, { data: profiles, error: profilesError }] = await Promise.all([
-      supabase.from("pets").select("id, owner_id, name, species, breed, pet_id, status, pet_id_status, pet_id_issued_at, pet_id_valid_through").in("status", ["pending", "approved"]).order("created_at", { ascending: false }),
+      supabase.from("pets").select("id, owner_id, name, species, breed, pet_id, rfid_tag, status, pet_id_status, pet_id_issued_at, pet_id_valid_through").in("status", ["pending", "approved"]).order("created_at", { ascending: false }),
       supabase.from("profiles").select("id, full_name, email, barangay").eq("role", "owner"),
     ]);
     const error = petsError ?? profilesError;
@@ -84,6 +78,7 @@ const PetId = () => {
       return {
         recordId: pet.id,
         id: pet.pet_id || `Pending • ${pet.id.slice(0, 8)}`,
+        rfidTag: pet.rfid_tag,
         pet: pet.name,
         species: pet.species as "Dog" | "Cat",
         breed: pet.breed,
@@ -108,7 +103,7 @@ const PetId = () => {
     return records.filter((record) => {
       const matchesQuery =
         search.length === 0 ||
-        `${record.id} ${record.pet} ${record.owner} ${record.barangay} ${record.breed}`
+        `${record.id} ${record.rfidTag ?? ""} ${record.pet} ${record.owner} ${record.barangay} ${record.breed}`
           .toLowerCase()
           .includes(search);
       const matchesStatus = status === "all" || record.status === status;
@@ -226,7 +221,7 @@ const PetId = () => {
             <Input
               value={query}
               onChange={(event) => resetPage(setQuery)(event.target.value)}
-              placeholder="Search pet ID, pet, or owner…"
+              placeholder="Search Pet ID, RFID, pet, or owner…"
               aria-label="Search pet IDs"
               className="h-9 rounded-xl border-border bg-background pl-9 text-[12px] focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-0"
             />
@@ -322,8 +317,8 @@ const PetId = () => {
           </div>
         ) : null}
 
-        <div className="hidden border-y border-border bg-secondary/40 px-5 py-2 xl:grid xl:grid-cols-[minmax(0,1.1fr)_148px_minmax(0,1.1fr)_92px_96px_92px_72px] xl:gap-4">
-          {["Pet", "Pet ID", "Owner", "Issued", "Valid through", "Status", "Action"].map((label) => (
+        <div className="hidden border-y border-border bg-secondary/40 px-5 py-2 xl:grid xl:grid-cols-[minmax(0,1.1fr)_148px_minmax(0,1.1fr)_92px_96px_92px] xl:gap-4">
+          {["Pet", "Pet ID", "Owner", "Issued", "Valid through", "Status"].map((label) => (
             <p
               key={label}
               className="text-[9px] font-bold uppercase tracking-[0.12em] text-muted-foreground"
@@ -358,7 +353,21 @@ const PetId = () => {
             {visible.map((record) => (
               <li
                 key={record.recordId}
-                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2.5 px-3.5 py-3.5 transition-colors hover:bg-secondary/30 sm:px-4 xl:grid-cols-[minmax(0,1.1fr)_148px_minmax(0,1.1fr)_92px_96px_92px_72px] xl:gap-4 xl:px-5"
+                role="button"
+                tabIndex={0}
+                aria-label={`View Pet ID record for ${record.pet}, ${record.id}`}
+                onClick={(event) => {
+                  if ((event.target as HTMLElement).closest("button")) return;
+                  setSelected(record);
+                }}
+                onKeyDown={(event) => {
+                  if (event.target !== event.currentTarget) return;
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setSelected(record);
+                  }
+                }}
+                className="grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2.5 px-3.5 py-3.5 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary sm:px-4 xl:grid-cols-[minmax(0,1.1fr)_148px_minmax(0,1.1fr)_92px_96px_92px] xl:gap-4 xl:px-5"
               >
                 <div className="order-1 flex min-w-0 items-center gap-2.5 xl:order-none">
                   <span
@@ -384,7 +393,7 @@ const PetId = () => {
                       {record.id}
                       <button
                         type="button"
-                        onClick={() => copyId(record.id)}
+                        onClick={(event) => { event.stopPropagation(); void copyId(record.id); }}
                         className="text-primary/70 transition-colors hover:text-primary"
                         aria-label={`Copy pet ID ${record.id}`}
                       >
@@ -400,7 +409,7 @@ const PetId = () => {
                   </p>
                   <button
                     type="button"
-                    onClick={() => copyId(record.id)}
+                    onClick={(event) => { event.stopPropagation(); void copyId(record.id); }}
                     className="num inline-flex items-center gap-1 rounded-md bg-secondary px-1.5 py-0.5 text-[10px] font-bold text-foreground/80 transition-colors hover:bg-primary-soft hover:text-primary"
                     aria-label={`Copy pet ID ${record.id}`}
                   >
@@ -439,22 +448,6 @@ const PetId = () => {
                   <StatusPill status={record.status} />
                 </div>
 
-                <div className="order-4 col-span-2 flex items-center justify-end gap-1 xl:order-none xl:col-span-1 xl:justify-start">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        size="icon"
-                        variant="outline"
-                        onClick={() => setSelected(record)}
-                        className="size-7 rounded-lg border-border text-muted-foreground hover:border-primary/30 hover:text-primary"
-                        aria-label={`Preview ID for ${record.pet}`}
-                      >
-                        <Eye className="size-3.5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Preview digital ID</TooltipContent>
-                  </Tooltip>
-                </div>
               </li>
             ))}
           </ul>

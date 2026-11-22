@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import {
   CalendarDays,
   Check,
-  Eye,
   Mail,
   MapPin,
   PawPrint,
@@ -24,6 +23,7 @@ import { MetricStrip } from "@/components/admin/metric-strip";
 import { FilterSelect } from "@/components/admin/filter-select";
 import { StatusPill } from "@/components/admin/status-pill";
 import { Pagination } from "@/components/admin/pagination";
+import { PetPhoto } from "@/components/owner-app/pet-photo";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -47,6 +47,20 @@ import { supabase } from "@/integrations/supabase/client";
 
 const PAGE_SIZE = 5;
 
+interface OwnerPetProfile {
+  id: string;
+  owner_id: string;
+  name: string;
+  species: string;
+  breed: string;
+  age: string;
+  sex: string;
+  photo_url: string | null;
+  pet_id: string | null;
+  rfid_tag: string | null;
+  status: string;
+}
+
 const initials = (name: string) =>
   name
     .split(" ")
@@ -56,6 +70,7 @@ const initials = (name: string) =>
 
 const Owners = () => {
   const [ownerRows, setOwnerRows] = useState<OwnerRecord[]>([]);
+  const [petsByOwner, setPetsByOwner] = useState<Map<string, OwnerPetProfile[]>>(new Map());
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -78,7 +93,7 @@ const Owners = () => {
         .select("id, email, full_name, phone, address, barangay, approval_status, created_at")
         .eq("role", "owner")
         .order("created_at", { ascending: false }),
-      supabase.from("pets").select("owner_id"),
+      supabase.from("pets").select("id, owner_id, name, species, breed, age, sex, photo_url, pet_id, rfid_tag, status"),
     ]);
 
     if (profilesError) {
@@ -89,10 +104,17 @@ const Owners = () => {
       return;
     }
 
-    if (petsError) toast.warning("Owner profiles loaded, but pet counts are unavailable until the pets setup is applied.");
+    if (petsError) toast.warning("Owner profiles loaded, but pet profiles are unavailable.");
 
     const petCounts = new Map<string, number>();
-    for (const pet of petRows ?? []) petCounts.set(pet.owner_id, (petCounts.get(pet.owner_id) ?? 0) + 1);
+    const groupedPets = new Map<string, OwnerPetProfile[]>();
+    for (const pet of petRows ?? []) {
+      petCounts.set(pet.owner_id, (petCounts.get(pet.owner_id) ?? 0) + 1);
+      const ownerPets = groupedPets.get(pet.owner_id) ?? [];
+      ownerPets.push(pet as OwnerPetProfile);
+      groupedPets.set(pet.owner_id, ownerPets);
+    }
+    setPetsByOwner(groupedPets);
     setOwnerRows((profiles ?? []).map((profile) => ({
       id: profile.id,
       name: profile.full_name || "Owner name not provided",
@@ -397,7 +419,18 @@ const Owners = () => {
             {visible.map((owner) => (
               <li
                 key={owner.id}
-                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2.5 px-3.5 py-3.5 transition-colors hover:bg-secondary/30 sm:px-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,0.95fr)_minmax(0,1.35fr)_48px_88px_84px_132px] xl:gap-4 xl:px-5"
+                role="button"
+                tabIndex={0}
+                aria-label={`View owner record for ${owner.name}`}
+                onClick={() => setSelected(owner)}
+                onKeyDown={(event) => {
+                  if (event.target !== event.currentTarget) return;
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setSelected(owner);
+                  }
+                }}
+                className="grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2.5 px-3.5 py-3.5 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary sm:px-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,0.95fr)_minmax(0,1.35fr)_48px_88px_84px_132px] xl:gap-4 xl:px-5"
               >
                 <div className="order-1 flex min-w-0 items-center gap-2.5 xl:order-none">
                   <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary-soft text-[11px] font-bold text-primary">
@@ -442,7 +475,7 @@ const Owners = () => {
                   <StatusPill status={owner.status} />
                 </div>
 
-                <div className="order-4 col-span-2 flex items-center justify-end gap-1 xl:order-none xl:col-span-1 xl:justify-start">
+                <div onClick={(event) => event.stopPropagation()} className="order-4 col-span-2 flex items-center justify-end gap-1 xl:order-none xl:col-span-1 xl:justify-start">
                   {owner.status === "pending" ? (
                     <>
                       <Tooltip>
@@ -487,20 +520,6 @@ const Owners = () => {
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>Register a pet</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        size="icon"
-                        variant="outline"
-                        onClick={() => setSelected(owner)}
-                        className="size-7 rounded-lg border-border text-muted-foreground hover:border-primary/30 hover:text-primary"
-                        aria-label={`View ${owner.name}`}
-                      >
-                        <Eye className="size-3.5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>View owner record</TooltipContent>
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -579,6 +598,36 @@ const Owners = () => {
                     {selected.pets} {selected.pets === 1 ? "registered pet" : "registered pets"}
                   </span>
                 </div>
+
+                {!editing ? (
+                  <section className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Pet profiles</h3>
+                      <span className="text-[10px] font-semibold text-muted-foreground">{petsByOwner.get(selected.id)?.length ?? 0}</span>
+                    </div>
+                    {(petsByOwner.get(selected.id)?.length ?? 0) > 0 ? (
+                      <ul className="divide-y divide-border rounded-xl border border-border bg-card">
+                        {petsByOwner.get(selected.id)?.map((pet) => (
+                          <li key={pet.id} className="flex min-w-0 items-center gap-2.5 p-2.5">
+                            <PetPhoto src={pet.photo_url ?? undefined} alt={pet.name} species={pet.species === "Cat" ? "Cat" : "Dog"} className="size-11 shrink-0 rounded-lg" />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <p className="truncate text-[11.5px] font-bold text-foreground">{pet.name}</p>
+                                <StatusPill status={pet.status === "approved" ? "approved" : pet.status === "rejected" ? "rejected" : "pending"} />
+                              </div>
+                              <p className="truncate text-[9.5px] text-muted-foreground">{pet.breed} · {pet.species} · {pet.sex} · {pet.age}</p>
+                              <p className="num mt-0.5 truncate text-[9px] text-muted-foreground">
+                                Pet ID: {pet.pet_id ?? "Pending"} · RFID: {pet.rfid_tag ?? "Not assigned"}
+                              </p>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="rounded-xl border border-dashed border-border px-3 py-4 text-center text-[10px] text-muted-foreground">No pet profiles linked to this owner yet.</p>
+                    )}
+                  </section>
+                ) : null}
 
                 {editing ? (
                   <div className="space-y-3 rounded-xl border border-border bg-card p-3.5">

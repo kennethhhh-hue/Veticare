@@ -112,9 +112,9 @@ Whenever a new module (such as a component, hook, or utility) or a new page is a
 
 ### 6. Updating Page Metadata (SEO & Social Sharing)
 
-- **Site-level metadata lives in the `<head>` of `index.html`.** The `og:*` and `twitter:*` tags ship with Enter platform defaults and are what link previews (WhatsApp, X, Slack, etc.) display.
-- **Whenever you change `<title>` or `<meta name="description">`, update `og:title` / `og:description` / `og:image:alt` and `twitter:title` / `twitter:description` to match.**
-- **`og:image` / `twitter:image` must be absolute URLs**, because link-preview crawlers do not resolve relative paths. The default points to the Enter share image (1200×630); when the project has its own preview image, replace both with its absolute URL and keep `og:image:width` / `og:image:height` accurate.
+- **Site-level metadata lives in the `<head>` of `index.html`.** The `og:*` and `twitter:*` tags are used by link previews (WhatsApp, X, Slack, etc.).
+- **Whenever you change `<title>` or `<meta name="description">`, update `og:title` / `og:description` / `og:image:alt` and `twitter:title` / `twitter:description` to match Veticare's branding.**
+- **`og:image` / `twitter:image` must be absolute URLs**, because link-preview crawlers do not resolve relative paths. Use a Veticare image hosted on the production site and keep `og:image:width` / `og:image:height` accurate.
 
 ## Coding Best Practices
 

@@ -241,7 +241,7 @@ const OwnerApp = () => {
   };
 
   return (
-    <div className="page-backdrop relative flex min-h-screen flex-col items-center justify-center overflow-hidden sm:px-6 sm:py-6">
+    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-background sm:px-6 sm:py-6">
       <div
         className="pointer-events-none absolute -left-24 top-10 hidden size-[320px] rounded-full bg-primary/10 blur-3xl sm:block"
         aria-hidden

@@ -65,9 +65,6 @@ const Registrations = () => {
   const [savingApproval, setSavingApproval] = useState(false);
   const rfidInputRef = useRef<HTMLInputElement>(null);
   const rfidScanTimerRef = useRef<number | null>(null);
-  const rfidLastKeyAtRef = useRef(0);
-  const rfidBurstCountRef = useRef(0);
-  const rfidBurstIsFastRef = useRef(true);
 
   const loadRegistry = useCallback(async () => {
     setLoading(true);
@@ -196,8 +193,27 @@ const Registrations = () => {
       p_exclude_pet_id: issueTarget.id,
     });
     if (error) {
-      setRfidScanStatus("error");
-      setRfidScanMessage("Unable to verify this tag. Check the database migration and try again.");
+      const { data: assignedTags, error: lookupError } = await supabase
+        .from("pets")
+        .select("id, name, rfid_tag")
+        .not("rfid_tag", "is", null);
+      if (lookupError) {
+        setRfidScanStatus("error");
+        setRfidScanMessage(`Unable to verify this tag: ${lookupError.message}`);
+        return;
+      }
+      const normalizedUid = uid.replace(/[\s-]/g, "").toLowerCase();
+      const duplicate = assignedTags?.find((pet) =>
+        pet.id !== issueTarget.id &&
+        (pet.rfid_tag ?? "").replace(/[\s-]/g, "").toLowerCase() === normalizedUid,
+      );
+      if (duplicate) {
+        setRfidScanStatus("duplicate");
+        setRfidScanMessage(`This RFID is already assigned to ${duplicate.name}. Scan a different tag.`);
+        return;
+      }
+      setRfidScanStatus("available");
+      setRfidScanMessage("RFID detected and available. Database-side duplicate index is recommended.");
       return;
     }
     if (data?.length) {
@@ -211,9 +227,6 @@ const Registrations = () => {
 
   const startRfidScan = () => {
     if (rfidScanTimerRef.current !== null) window.clearTimeout(rfidScanTimerRef.current);
-    rfidLastKeyAtRef.current = 0;
-    rfidBurstCountRef.current = 0;
-    rfidBurstIsFastRef.current = true;
     setIssueRfid("");
     setRfidScanMessage("Waiting for RFID Tag…");
     setRfidScanStatus("waiting");
@@ -226,13 +239,8 @@ const Registrations = () => {
     setRfidScanMessage("RFID data received. Verifying reader scan...");
     if (rfidScanTimerRef.current !== null) window.clearTimeout(rfidScanTimerRef.current);
     rfidScanTimerRef.current = window.setTimeout(() => {
-      if (rfidBurstCountRef.current < 4 || !rfidBurstIsFastRef.current) {
-        setRfidScanStatus("error");
-        setRfidScanMessage("No RFID reader scan detected. Use a keyboard-emulation reader and scan the keytag.");
-        return;
-      }
       void validateScannedRfid(value);
-    }, 600);
+    }, 700);
   };
 
   const handleRfidKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
@@ -240,25 +248,8 @@ const Registrations = () => {
       if (!event.currentTarget.value.trim()) return;
       event.preventDefault();
       if (rfidScanTimerRef.current !== null) window.clearTimeout(rfidScanTimerRef.current);
-      if (rfidBurstCountRef.current < 4 || !rfidBurstIsFastRef.current) {
-        setRfidScanStatus("error");
-        setRfidScanMessage("No RFID reader scan detected. Use a keyboard-emulation reader and scan the keytag.");
-        return;
-      }
       void validateScannedRfid(event.currentTarget.value);
-      return;
     }
-    if (event.key.length !== 1) return;
-    const now = performance.now();
-    const gap = rfidLastKeyAtRef.current ? now - rfidLastKeyAtRef.current : 0;
-    if (gap > 120) {
-      rfidBurstCountRef.current = 0;
-      rfidBurstIsFastRef.current = true;
-    }
-    if (gap > 0 && gap <= 120) rfidBurstCountRef.current += 1;
-    else rfidBurstCountRef.current = 1;
-    if (gap > 120) rfidBurstIsFastRef.current = false;
-    rfidLastKeyAtRef.current = now;
   };
 
   const issueIdentifiersAndApprove = async () => {
@@ -273,8 +264,18 @@ const Registrations = () => {
     if (error) {
       setSavingApproval(false);
       if (error.code === "23505") {
-        setRfidScanStatus("duplicate");
-        setRfidScanMessage("This RFID or Pet ID was just assigned elsewhere. Scan a new tag or refresh the Pet ID.");
+        const duplicateRfid = error.message.includes("rfid_tag");
+        const duplicatePetId = error.message.includes("pet_id") || error.message.includes("qr_code");
+        if (duplicateRfid) {
+          setRfidScanStatus("duplicate");
+          setRfidScanMessage("This RFID is already assigned to another pet. Scan a different tag.");
+        } else if (duplicatePetId) {
+          setRfidScanStatus("error");
+          setRfidScanMessage("This Pet ID or QR value is already assigned. Refresh the Pet ID and try again.");
+        } else {
+          setRfidScanStatus("error");
+          setRfidScanMessage("A related database record conflicts with this approval. Apply the latest Supabase migration, then retry.");
+        }
       }
       toast.error(error.message);
       return;
@@ -528,7 +529,18 @@ const Registrations = () => {
             {visible.map((row) => (
               <li
                 key={row.id}
-                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2.5 px-3.5 py-3.5 transition-colors hover:bg-secondary/30 sm:px-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1.05fr)_minmax(0,1.05fr)_minmax(0,0.85fr)_104px_116px] xl:gap-4 xl:px-5"
+                role="button"
+                tabIndex={0}
+                aria-label={`View registration record for ${row.name}`}
+                onClick={() => setDetailTarget(row)}
+                onKeyDown={(event) => {
+                  if (event.target !== event.currentTarget) return;
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setDetailTarget(row);
+                  }
+                }}
+                className="grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2.5 px-3.5 py-3.5 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary sm:px-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1.05fr)_minmax(0,1.05fr)_minmax(0,0.85fr)_104px_116px] xl:gap-4 xl:px-5"
               >
                 <div className="flex min-w-0 items-center gap-2.5">
                   {row.photoUrl ? (
@@ -551,9 +563,9 @@ const Registrations = () => {
                   )}
                     <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <button type="button" onClick={() => setDetailTarget(row)} className="truncate text-left text-[12.5px] font-bold text-foreground hover:text-primary hover:underline">
+                      <p className="truncate text-left text-[12.5px] font-bold text-foreground">
                         {row.name}
-                      </button>
+                      </p>
                       {row.isDraft ? (
                         <span className="shrink-0 rounded bg-secondary px-1 py-0.5 text-[8.5px] font-bold uppercase tracking-wide text-muted-foreground">
                           Draft
@@ -600,7 +612,7 @@ const Registrations = () => {
                   <StatusPill status={row.status} />
                 </div>
 
-                <div className="order-4 col-span-2 flex items-center justify-end gap-1.5 sm:col-span-1 xl:order-none xl:justify-start">
+                <div onClick={(event) => event.stopPropagation()} className="order-4 col-span-2 flex items-center justify-end gap-1.5 sm:col-span-1 xl:order-none xl:justify-start">
                   {row.status === "pending" ? (
                     <>
                       <Tooltip>

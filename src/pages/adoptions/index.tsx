@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import {
   Check,
   Clock,
-  Eye,
   Heart,
   HeartHandshake,
   Mail,
@@ -461,7 +460,18 @@ const Adoptions = () => {
             {visible.map((application) => (
               <li
                 key={application.id}
-                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2.5 px-3.5 py-3.5 transition-colors hover:bg-secondary/30 sm:px-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1.1fr)_105px_105px_96px_112px] xl:gap-4 xl:px-5"
+                role="button"
+                tabIndex={0}
+                aria-label={`View adoption application from ${application.applicant}`}
+                onClick={() => setSelected(application)}
+                onKeyDown={(event) => {
+                  if (event.target !== event.currentTarget) return;
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setSelected(application);
+                  }
+                }}
+                className="grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2.5 px-3.5 py-3.5 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary sm:px-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1.1fr)_105px_105px_96px_112px] xl:gap-4 xl:px-5"
               >
                 <div className="order-1 flex min-w-0 items-center gap-2.5 xl:order-none">
                   <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary-soft text-[11px] font-bold text-primary">
@@ -511,21 +521,7 @@ const Adoptions = () => {
                   <StatusPill status={application.applicationStatus} />
                 </div>
 
-                <div className="order-4 col-span-2 flex items-center justify-end gap-1 xl:order-none xl:col-span-1 xl:justify-start">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        size="icon"
-                        variant="outline"
-                        onClick={() => setSelected(application)}
-                        className="size-7 rounded-lg border-border text-muted-foreground hover:border-primary/30 hover:text-primary"
-                        aria-label={`View application from ${application.applicant}`}
-                      >
-                        <Eye className="size-3.5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>View application</TooltipContent>
-                  </Tooltip>
+                <div onClick={(event) => event.stopPropagation()} className="order-4 col-span-2 flex items-center justify-end gap-1 xl:order-none xl:col-span-1 xl:justify-start">
                   {application.status === "pending" ? (
                     <>
                       <Tooltip>
