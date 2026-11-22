@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 import {
   getShiftStats,
-  personnelProfile,
   scanResultLabels,
   type ScanEntry,
   type ScanResult,
@@ -60,12 +59,12 @@ export function HomeScreen({ scans, impoundNotices, personnelName, notifications
     <div className="pb-6">
       <header className="flex items-center gap-3 px-5 pt-5">
         <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary text-[12px] font-bold text-primary-foreground">
-          {personnelProfile.initials}
+          {(personnelName || "OCVAS Personnel").split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase()}
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-[10.5px] font-medium text-muted-foreground">Good morning</p>
           <p className="truncate text-[15px] font-extrabold tracking-[-0.02em] text-foreground">
-            {personnelName || "City Pound Personnel"}
+            {personnelName || "OCVAS Personnel"}
           </p>
         </div>
         <button type="button" onClick={() => setNotificationsOpen((open) => !open)} className="relative grid size-9 place-items-center rounded-xl border border-border bg-card text-foreground" aria-label={`${unreadNotifications} unread notifications`} aria-expanded={notificationsOpen}>
@@ -102,7 +101,7 @@ export function HomeScreen({ scans, impoundNotices, personnelName, notifications
               QR verification
             </span>
             <span className="text-[9px] font-medium text-primary-foreground/75">
-              {personnelProfile.shift}
+              OCVAS · Batangas City
             </span>
           </div>
           <p className="relative mt-3 text-[19px] font-extrabold leading-tight tracking-[-0.02em]">
@@ -164,7 +163,7 @@ export function HomeScreen({ scans, impoundNotices, personnelName, notifications
           </button>
         </div>
 
-        <ul className="mt-2.5 space-y-2 px-5">
+        {scans.length ? <ul className="mt-2.5 space-y-2 px-5">
           {scans.slice(0, 3).map((scan) => (
             <li key={scan.id}>
               <button
@@ -191,7 +190,7 @@ export function HomeScreen({ scans, impoundNotices, personnelName, notifications
               </button>
             </li>
           ))}
-        </ul>
+        </ul> : <p className="mx-5 mt-2.5 rounded-xl border border-dashed border-border px-3 py-5 text-center text-[10px] text-muted-foreground">No scans have been recorded yet.</p>}
       </section>
 
       {impoundNotices.length ? (

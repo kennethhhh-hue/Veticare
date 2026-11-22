@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Brand } from "@/components/veticare/brand";
+import { OcvasContactInfo } from "@/components/veticare/ocvas-contact-info";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -71,10 +72,11 @@ const AdminLogin = () => {
         aria-hidden
       />
 
-      <div className="relative w-full max-w-[428px]">
-        <div className="mb-4 flex flex-col items-center text-center">
-          <Brand />
-        </div>
+      <div className="relative w-full max-w-[1080px]">
+        <div className="mx-auto w-full max-w-[428px]">
+          <div className="mb-4 flex flex-col items-center text-center">
+            <Brand />
+          </div>
 
         <div className="surface-raised relative overflow-hidden rounded-3xl border border-border bg-card p-5 sm:p-6">
           <button
@@ -208,13 +210,11 @@ const AdminLogin = () => {
           </form>
         </div>
 
-        <p className="mt-4 text-center text-[11px] leading-relaxed text-muted-foreground">
-          Veticare • City Veterinary Office
-          <br />
-          <span className="text-[10px] text-muted-foreground/80">
-            Authorized personnel only • activity is logged
-          </span>
-        </p>
+        </div>
+        <div className="mt-7 w-full">
+          <OcvasContactInfo />
+        </div>
+
       </div>
     </div>
   );

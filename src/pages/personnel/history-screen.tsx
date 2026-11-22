@@ -3,7 +3,7 @@ import { ChevronRight, Clock, History, QrCode } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PetRecord } from "@/pages/personnel/pet-record";
 import {
-  registryPets,
+  type PersonnelPet,
   scanResultLabels,
   type ScanEntry,
   type ScanResult,
@@ -25,16 +25,17 @@ const resultTone: Record<ScanResult, string> = {
 
 interface HistoryScreenProps {
   scans: ScanEntry[];
+  pets: PersonnelPet[];
 }
 
-export function HistoryScreen({ scans }: HistoryScreenProps) {
+export function HistoryScreen({ scans, pets }: HistoryScreenProps) {
   const [filter, setFilter] = useState<"all" | ScanResult>("all");
   const [selected, setSelected] = useState<ScanEntry | null>(null);
 
   const visible = scans.filter((scan) => filter === "all" || scan.result === filter);
 
   if (selected) {
-    const pet = registryPets.find((item) => item.id === selected.petId);
+    const pet = pets.find((item) => item.id === selected.petId);
     return (
       <div className="pb-6">
         <header className="px-5 pt-5">

@@ -175,6 +175,24 @@
 }
 
 @layer utilities {
+  .mobile-app-viewport {
+    box-sizing: border-box;
+    height: 100vh;
+    height: 100svh;
+    min-height: 0;
+    overflow: hidden;
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  @media (min-width: 640px) {
+    .mobile-app-viewport {
+      height: auto;
+      min-height: 100vh;
+      overflow: visible;
+      padding-top: 0;
+    }
+  }
+
   .page-wash {
     background-image: var(--gradient-page);
     background-repeat: no-repeat;

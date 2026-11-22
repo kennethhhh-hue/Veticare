@@ -12,7 +12,6 @@ import { ProfileScreen } from "@/pages/personnel/profile-screen";
 import { supabase } from "@/integrations/supabase/client";
 import type { OwnerNotification } from "@/pages/owner-app/notifications-screen";
 import {
-  registryPets,
   type PersonnelPet,
   type ScanEntry,
   type ScanResult,
@@ -38,8 +37,8 @@ const PersonnelApp = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [scans, setScans] = useState<ScanEntry[]>(readScans);
-  const [scanRegistry, setScanRegistry] = useState<PersonnelPet[]>(registryPets);
-  const nextScanId = useRef(Math.max(3022, ...scans.map((scan) => Number(scan.id.replace("SC-", "")) + 1)));
+  const [scanRegistry, setScanRegistry] = useState<PersonnelPet[]>([]);
+  const nextScanId = useRef(Math.max(0, ...scans.map((scan) => Number(scan.id.replace("SC-", "")) + 1)));
   const [tab, setTabState] = useState<PersonnelTab>(() => {
     const initial = searchParams.get("tab");
     return isTab(initial) ? initial : "home";
@@ -47,7 +46,7 @@ const PersonnelApp = () => {
   const [verifiedIds, setVerifiedIds] = useState<string[]>(readVerifiedIds);
   const [reviewIds, setReviewIds] = useState<string[]>(readReviewIds);
   const [impoundNotices, setImpoundNotices] = useState(readImpoundNotices);
-  const [personnelIdentity, setPersonnelIdentity] = useState({ name: "", email: "", phone: "" });
+  const [personnelIdentity, setPersonnelIdentity] = useState({ name: "", email: "", phone: "", avatarUrl: "" });
   const [notifications, setNotifications] = useState<OwnerNotification[]>([]);
 
   useEffect(() => {
@@ -65,9 +64,10 @@ const PersonnelApp = () => {
       if (profileError) console.error("Unable to load personnel profile:", profileError.message);
       if (notificationsError) console.error("Unable to load personnel notifications:", notificationsError.message);
       setPersonnelIdentity({
-        name: profile?.full_name || String(user.user_metadata.full_name ?? user.email ?? "City Pound Personnel"),
+        name: profile?.full_name || String(user.user_metadata.full_name ?? user.email ?? "OCVAS Personnel"),
         email: profile?.email || user.email || "",
         phone: profile?.phone || String(user.user_metadata.phone ?? ""),
+        avatarUrl: String(user.user_metadata.avatar_url ?? ""),
       });
       if (!notificationsError) setNotifications(rows ?? []);
       channel = supabase.channel(`personnel-header-notifications-${user.id}`)
@@ -108,6 +108,7 @@ const PersonnelApp = () => {
       if (!active) return;
       if (petsError) {
         console.error("Unable to load issued pet identifiers:", petsError.message);
+        setScanRegistry([]);
         return;
       }
 
@@ -118,6 +119,7 @@ const PersonnelApp = () => {
       if (!active) return;
       if (profilesError) {
         console.error("Unable to load owner contact details:", profilesError.message);
+        setScanRegistry([]);
         return;
       }
 
@@ -145,8 +147,7 @@ const PersonnelApp = () => {
           qrCode: pet.qr_code,
         };
       });
-      const issuedIds = new Set(issuedPets.map((pet) => pet.id));
-      setScanRegistry([...issuedPets, ...registryPets.filter((pet) => !issuedIds.has(pet.id))]);
+      setScanRegistry(issuedPets);
     };
 
     void loadIssuedPets();
@@ -164,12 +165,12 @@ const PersonnelApp = () => {
 
   const addScan = (pet: PersonnelPet, result: ScanResult, note: string) => {
     const entry: ScanEntry = {
-      id: `SC-${nextScanId.current++}`,
+      id: `SC-${String(++nextScanId.current).padStart(4, "0")}`,
       petId: pet.id,
       petName: pet.name,
       scannedAt: "Just now",
       result,
-      officer: "Marco Dizon",
+      officer: personnelIdentity.name || "OCVAS Personnel",
       note,
     };
     setScans((prev) => {
@@ -212,7 +213,7 @@ const PersonnelApp = () => {
   };
 
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-background sm:px-6 sm:py-6">
+    <div className="mobile-app-viewport relative flex flex-col items-center justify-center bg-background sm:px-6 sm:py-6">
       <div
         className="pointer-events-none absolute -left-24 top-10 hidden size-[320px] rounded-full bg-primary/10 blur-3xl sm:block"
         aria-hidden
@@ -222,10 +223,10 @@ const PersonnelApp = () => {
         aria-hidden
       />
 
-      <div className="relative w-full sm:max-w-[420px]">
-        <div className="relative overflow-hidden bg-background sm:max-h-[860px] sm:rounded-[2.6rem] sm:border-[10px] sm:border-foreground/85 sm:shadow-raised">
-          <div className="flex h-[100dvh] flex-col sm:h-[calc(100dvh-88px)] sm:max-h-[840px]">
-            <div className="page-wash scroll-slim flex-1 overflow-y-auto">
+      <div className="relative h-full min-h-0 w-full sm:h-auto sm:max-w-[420px]">
+        <div className="relative h-full min-h-0 overflow-hidden bg-background sm:h-[calc(100dvh-88px)] sm:max-h-[840px] sm:rounded-[2.6rem] sm:border-[10px] sm:border-foreground/85 sm:shadow-raised">
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="page-wash scroll-slim min-h-0 flex-1 overflow-y-auto overscroll-contain">
               {tab === "home" ? (
                 <HomeScreen
                   scans={scans}
@@ -257,11 +258,16 @@ const PersonnelApp = () => {
                   });
                 }} />
               ) : null}
-              {tab === "history" ? <HistoryScreen scans={scans} /> : null}
-              {tab === "profile" ? <ProfileScreen identity={personnelIdentity} /> : null}
+              {tab === "history" ? <HistoryScreen scans={scans} pets={scanRegistry} /> : null}
+              {tab === "profile" ? (
+                <ProfileScreen
+                  identity={personnelIdentity}
+                  onPhotoUpdated={(avatarUrl) => setPersonnelIdentity((current) => ({ ...current, avatarUrl }))}
+                />
+              ) : null}
             </div>
 
-            <nav className="relative border-t border-border bg-card/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl">
+            <nav className="relative shrink-0 border-t border-border bg-card/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl">
               <div className="flex items-end justify-around gap-1">
                 {leftTabs.map((item) => {
                   const Icon = item.icon;
@@ -339,7 +345,7 @@ const PersonnelApp = () => {
         </div>
 
         <p className="mt-3 hidden items-center justify-center gap-2 text-center text-[10.5px] text-muted-foreground sm:flex">
-          Veticare City Pound app • sample data
+          Veticare City Pound Personnel
           <span className="text-muted-foreground/40">|</span>
           <button
             type="button"

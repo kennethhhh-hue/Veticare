@@ -58,6 +58,7 @@ const OwnerApp = () => {
     phone: String(session?.user.user_metadata.phone ?? ""),
     address: String(session?.user.user_metadata.address ?? ""),
     barangay: String(session?.user.user_metadata.barangay ?? ""),
+    avatarUrl: String(session?.user.user_metadata.avatar_url ?? ""),
   }));
   const [adoptionRequests, setAdoptionRequests] = useState<AdoptionRequest[]>([]);
   const [ownerRequests, setOwnerRequests] = useState<OwnerRequest[]>(readOwnerRequests);
@@ -87,6 +88,7 @@ const OwnerApp = () => {
       phone: profileRow?.phone || String(userData.user.user_metadata.phone ?? ""),
       address: profileRow?.address || String(userData.user.user_metadata.address ?? ""),
       barangay: profileRow?.barangay || String(userData.user.user_metadata.barangay ?? ""),
+      avatarUrl: String(userData.user.user_metadata.avatar_url ?? ""),
     };
     setProfile(nextProfile);
     writeOwnerProfile(nextProfile);
@@ -241,7 +243,7 @@ const OwnerApp = () => {
   };
 
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-background sm:px-6 sm:py-6">
+    <div className="mobile-app-viewport relative flex flex-col items-center justify-center bg-background sm:px-6 sm:py-6">
       <div
         className="pointer-events-none absolute -left-24 top-10 hidden size-[320px] rounded-full bg-primary/10 blur-3xl sm:block"
         aria-hidden
@@ -251,10 +253,10 @@ const OwnerApp = () => {
         aria-hidden
       />
 
-      <div className="relative w-full sm:max-w-[420px]">
-        <div className="relative overflow-hidden bg-background sm:max-h-[860px] sm:rounded-[2.6rem] sm:border-[10px] sm:border-foreground/85 sm:shadow-raised">
-          <div className="flex h-[100dvh] flex-col sm:h-[calc(100dvh-88px)] sm:max-h-[840px]">
-            <div className="page-wash scroll-slim flex-1 overflow-y-auto">
+      <div className="relative h-full min-h-0 w-full sm:h-auto sm:max-w-[420px]">
+        <div className="relative h-full min-h-0 overflow-hidden bg-background sm:h-[calc(100dvh-88px)] sm:max-h-[840px] sm:rounded-[2.6rem] sm:border-[10px] sm:border-foreground/85 sm:shadow-raised">
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="page-wash scroll-slim min-h-0 flex-1 overflow-y-auto overscroll-contain">
               {registeringPet ? (
                 <PetRegistrationScreen
                   onBack={() => setRegisteringPet(false)}
@@ -322,9 +324,25 @@ const OwnerApp = () => {
                       petCount={pets.length}
                       adoptionCount={adoptionRequests.length}
                       requests={ownerRequests}
-                      onSave={(nextProfile) => {
+                      onSave={async (nextProfile) => {
+                        const { data: userData, error: userError } = await supabase.auth.getUser();
+                        if (userError || !userData.user) {
+                          toast.error(userError?.message ?? "Your session expired. Sign in again.");
+                          return false;
+                        }
+                        const { error } = await supabase.from("profiles").update({
+                          full_name: nextProfile.fullName.trim(),
+                          phone: nextProfile.phone.trim(),
+                          address: nextProfile.address.trim(),
+                          barangay: nextProfile.barangay.trim(),
+                        }).eq("id", userData.user.id);
+                        if (error) {
+                          toast.error(error.message);
+                          return false;
+                        }
                         setProfile(nextProfile);
                         writeOwnerProfile(nextProfile);
+                        return true;
                       }}
                     />
                   ) : null}
@@ -333,7 +351,7 @@ const OwnerApp = () => {
             </div>
 
             {showTabs ? (
-              <nav className="border-t border-border bg-card/95 px-2 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-xl">
+              <nav className="shrink-0 border-t border-border bg-card/95 px-2 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-xl">
                 <div className="flex items-center justify-around gap-1">
                   {tabs.map((item) => {
                     const Icon = item.icon;

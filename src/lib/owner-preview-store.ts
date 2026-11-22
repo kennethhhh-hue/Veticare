@@ -12,6 +12,7 @@ export interface OwnerProfile {
   phone: string;
   address: string;
   barangay: string;
+  avatarUrl?: string;
 }
 
 export interface AdoptionRequest {

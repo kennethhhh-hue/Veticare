@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BarangaySelect } from "@/components/owner-app/barangay-select";
 import type { PetRegistration } from "@/data/admin-records";
 
 export interface OwnerAccountOption {
@@ -11,6 +12,7 @@ export interface OwnerAccountOption {
   email: string | null;
   name: string;
   phone: string;
+  barangay: string;
 }
 
 interface AddPetDialogProps {
@@ -22,6 +24,7 @@ interface AddPetDialogProps {
 
 export function AddPetDialog({ open, owners, onOpenChange, onCreated }: AddPetDialogProps) {
   const [ownerId, setOwnerId] = useState("");
+  const [selectedBarangay, setSelectedBarangay] = useState("");
   const [name, setName] = useState("");
   const [species, setSpecies] = useState<"Dog" | "Cat">("Dog");
   const [breed, setBreed] = useState("");
@@ -32,9 +35,13 @@ export function AddPetDialog({ open, owners, onOpenChange, onCreated }: AddPetDi
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [reviewRegistration, setReviewRegistration] = useState<PetRegistration | null>(null);
+  const filteredOwners = selectedBarangay
+    ? owners.filter((owner) => owner.barangay === selectedBarangay)
+    : [];
 
   const reset = () => {
     setOwnerId("");
+    setSelectedBarangay("");
     setName("");
     setSpecies("Dog");
     setBreed("");
@@ -159,21 +166,43 @@ export function AddPetDialog({ open, owners, onOpenChange, onCreated }: AddPetDi
         ) : (
           <form onSubmit={handleSubmit} className="space-y-3">
             <div className="space-y-1.5">
+              <Label htmlFor="registration-barangay">Owner&apos;s barangay</Label>
+              <BarangaySelect
+                id="registration-barangay"
+                value={selectedBarangay}
+                onValueChange={(value) => {
+                  setSelectedBarangay(value);
+                  setOwnerId("");
+                  setError(null);
+                }}
+                placeholder="Choose a barangay first"
+                required
+                className={fieldClass}
+              />
+            </div>
+
+            <div className="space-y-1.5">
               <Label htmlFor="registration-owner">Pet owner account</Label>
               <select
                 id="registration-owner"
                 value={ownerId}
                 onChange={(event) => setOwnerId(event.target.value)}
-                required
+                required={Boolean(selectedBarangay)}
+                disabled={!selectedBarangay || filteredOwners.length === 0}
                 className={`${fieldClass} w-full rounded-md border px-3`}
               >
-                <option value="">Select owner</option>
-                {owners.map((owner) => (
+                <option value="">
+                  {!selectedBarangay ? "Select barangay first" : filteredOwners.length ? "Select owner" : "No owners in this barangay"}
+                </option>
+                {filteredOwners.map((owner) => (
                   <option key={owner.id} value={owner.id}>
                     {owner.name} {owner.email ? `(${owner.email})` : ""}
                   </option>
                 ))}
               </select>
+              {selectedBarangay && filteredOwners.length === 0 ? (
+                <p className="text-[10px] text-muted-foreground">No registered owner accounts found in {selectedBarangay}.</p>
+              ) : null}
             </div>
 
             <div className="grid grid-cols-2 gap-3">

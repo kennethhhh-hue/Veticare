@@ -4,7 +4,6 @@ import {
   BadgeCheck,
   BellRing,
   ChevronRight,
-  Clock,
   KeyRound,
   LogOut,
   Mail,
@@ -18,14 +17,21 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { personnelProfile } from "@/data/personnel";
+import { ProfilePhoto } from "@/components/veticare/profile-photo";
 import { signOut } from "@/integrations/supabase/auth-context";
 import { readPersonnelNotifications, readPersonnelRequests, writePersonnelNotifications, writePersonnelRequests } from "@/lib/personnel-preview-store";
 
-export function ProfileScreen({ identity }: { identity: { name: string; email: string; phone: string } }) {
+export function ProfileScreen({
+  identity,
+  onPhotoUpdated,
+}: {
+  identity: { name: string; email: string; phone: string; avatarUrl?: string };
+  onPhotoUpdated: (avatarUrl: string) => void;
+}) {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState(readPersonnelNotifications);
   const [resetOpen, setResetOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [resetNote, setResetNote] = useState("");
   const [resetRequests, setResetRequests] = useState(readPersonnelRequests);
 
@@ -45,7 +51,7 @@ export function ProfileScreen({ identity }: { identity: { name: string; email: s
     <div className="pb-6">
       <header className="px-5 pt-5">
         <p className="text-[9.5px] font-bold uppercase tracking-[0.16em] text-primary">
-          City Pound
+          OCVAS
         </p>
         <h1 className="mt-1 text-[24px] font-extrabold leading-none tracking-[-0.03em] text-foreground">
           My profile
@@ -55,31 +61,28 @@ export function ProfileScreen({ identity }: { identity: { name: string; email: s
       <section className="mt-4 px-5">
         <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
           <div className="flex items-center gap-3">
-            <span className="grid size-12 shrink-0 place-items-center rounded-full bg-primary text-[14px] font-bold text-primary-foreground">
-              {(identity.name || personnelProfile.name).split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase()}
+            <span className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-full bg-primary text-[14px] font-bold text-primary-foreground">
+              {identity.avatarUrl ? <img src={identity.avatarUrl} alt={`${identity.name || "Personnel"} profile`} className="size-full object-cover" /> : (identity.name || "OCVAS Personnel").split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase()}
             </span>
             <div className="min-w-0 flex-1">
               <p className="truncate text-[15px] font-extrabold tracking-[-0.02em] text-foreground">
-                {identity.name || "City Pound Personnel"}
+                {identity.name || "OCVAS Personnel"}
               </p>
               <p className="truncate text-[10px] text-muted-foreground">
-                {personnelProfile.role}
+                OCVAS Personnel
               </p>
-              <span className="num mt-1 inline-block rounded-md bg-secondary px-1.5 py-0.5 text-[9px] font-bold text-secondary-foreground">
-                {personnelProfile.employeeId}
-              </span>
             </div>
             <span className="flex shrink-0 items-center gap-1 rounded-full bg-success/10 px-2 py-1 text-[8px] font-bold uppercase tracking-wide text-success">
               <span className="size-1.5 rounded-full bg-success" />
               On duty
             </span>
           </div>
+          <Button type="button" variant="outline" size="sm" onClick={() => setEditOpen(true)} className="mt-3 h-8 w-full text-[10px]">Edit profile</Button>
 
           <div className="mt-3.5 space-y-2 border-t border-border pt-3">
             {[
-              { label: "Assignment", value: personnelProfile.assignment, icon: MapPin },
-              { label: "Shift today", value: personnelProfile.shift, icon: Clock },
-              { label: "With Veticare since", value: personnelProfile.since, icon: BadgeCheck },
+              { label: "Office", value: "Office of the City Veterinarian and Agricultural Services", icon: MapPin },
+              { label: "Location", value: "Batangas City", icon: BadgeCheck },
             ].map((row) => {
               const Icon = row.icon;
               return (
@@ -191,7 +194,7 @@ export function ProfileScreen({ identity }: { identity: { name: string; email: s
       </section>
 
       <p className="mt-4 text-center text-[8.5px] text-muted-foreground/70">
-        City Pound Personnel app • sample data
+        OCVAS Personnel · Batangas City
       </p>
 
       {resetRequests.length ? (
@@ -220,6 +223,21 @@ export function ProfileScreen({ identity }: { identity: { name: string; email: s
               <Button type="submit">Save request</Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="rounded-xl border-border bg-card sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle>Edit profile</DialogTitle>
+            <DialogDescription>Update your OCVAS personnel profile photo.</DialogDescription>
+          </DialogHeader>
+          <ProfilePhoto
+            name={identity.name || "OCVAS Personnel"}
+            photoUrl={identity.avatarUrl}
+            onPhotoUpdated={onPhotoUpdated}
+          />
+          <Button type="button" variant="outline" onClick={() => setEditOpen(false)}>Done</Button>
         </DialogContent>
       </Dialog>
     </div>

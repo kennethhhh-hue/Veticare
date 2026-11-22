@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowRight, Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { Brand } from "@/components/veticare/brand";
+import { OcvasContactInfo } from "@/components/veticare/ocvas-contact-info";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -93,15 +94,16 @@ const Login = () => {
         aria-hidden
       />
 
-      <div className="relative w-full max-w-[428px]">
-        <div className="mb-5 flex flex-col items-center text-center">
-          <Brand />
-        </div>
+      <div className="relative w-full max-w-[1080px]">
+        <div className="mx-auto w-full max-w-[428px]">
+          <div className="mb-5 flex flex-col items-center text-center">
+            <Brand />
+          </div>
 
         <div className="surface-raised relative overflow-hidden rounded-3xl border border-border bg-card p-5 sm:p-6">
           <div className="text-center">
             <h1 className="text-[25px] font-extrabold leading-tight tracking-[-0.03em] text-foreground">
-              {creatingAccount ? "Create your account" : "Welcome back"}
+              {creatingAccount ? "Create your account" : "Sign in to Veticare"}
             </h1>
             <p className="mx-auto mt-1.5 max-w-[300px] text-[12.5px] leading-relaxed text-muted-foreground">
               {creatingAccount
@@ -200,13 +202,11 @@ const Login = () => {
           </div>
         </div>
 
-        <p className="mt-4 text-center text-[11px] leading-relaxed text-muted-foreground">
-          Veticare • City Veterinary Office
-          <br />
-          <span className="text-[10px] text-muted-foreground/80">
-            Authorized personnel only • activity is logged
-          </span>
-        </p>
+        </div>
+        <div className="mt-7 w-full">
+          <OcvasContactInfo />
+        </div>
+
       </div>
     </div>
   );

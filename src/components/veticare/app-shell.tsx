@@ -114,7 +114,7 @@ function SidebarBody({
 }) {
   return <div className="flex h-full flex-col bg-sidebar">
       <div className="px-5 pb-5 pt-6">
-        <Brand />
+        <Brand compact />
         
       </div>
       <div className="scroll-slim min-h-0 flex-1 overflow-y-auto pb-4">

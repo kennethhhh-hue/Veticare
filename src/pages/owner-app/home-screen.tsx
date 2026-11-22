@@ -2,8 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import {
   Bell,
   ChevronRight,
-  FileText,
-  Heart,
   IdCard,
   MapPin,
   PawPrint,
@@ -33,9 +31,6 @@ interface HomeScreenProps {
 
 const quickActions = [
   { id: "register", label: "Register", icon: Plus },
-  { id: "pet-id", label: "Pet ID", icon: IdCard },
-  { id: "adopt", label: "Adopt", icon: Heart },
-  { id: "records", label: "Records", icon: FileText },
 ] as const;
 
 export function HomeScreen({
@@ -75,23 +70,9 @@ export function HomeScreen({
   });
 
   const handleQuickAction = (id: string) => {
-    if (id === "pet-id") {
-      const registeredPet = pets.find((pet) => pet.registrationStatus === "approved");
-      if (registeredPet) onOpenId(registeredPet);
-      else if (pets[0]) onOpenPet(pets[0]);
-      else onAddPet();
-      return;
-    }
     if (id === "register") {
       onAddPet();
-      return;
     }
-    if (id === "adopt") {
-      onOpenTab("adopt");
-      return;
-    }
-    if (pets[0]) onOpenPet(pets[0]);
-    else onAddPet();
   };
 
   const handleScroll = () => {
@@ -294,7 +275,7 @@ export function HomeScreen({
         </div>
       </section>
 
-      <section className="mt-4 grid grid-cols-4 gap-2 px-5">
+      <section className="mt-4 px-5">
         {quickActions.map((action) => {
           const Icon = action.icon;
           return (
@@ -302,12 +283,10 @@ export function HomeScreen({
               key={action.id}
               type="button"
               onClick={() => handleQuickAction(action.id)}
-              className="flex flex-col items-center gap-1.5 rounded-xl border border-border bg-card px-1 py-2.5 transition-colors hover:border-primary/30 hover:bg-primary-soft/40"
+              className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-[12px] font-bold text-primary-foreground shadow-glow transition-colors hover:bg-primary/90"
             >
-              <span className="grid size-8 place-items-center rounded-lg bg-primary-soft text-primary">
-                <Icon className="size-4" strokeWidth={2.1} />
-              </span>
-              <span className="text-[10px] font-semibold text-foreground/85">{action.label}</span>
+              <Icon className="size-4" strokeWidth={2.1} />
+              <span>Register a pet</span>
             </button>
           );
         })}

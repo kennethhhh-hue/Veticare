@@ -4,6 +4,7 @@ import {
   Check,
   CircleCheck,
   Cpu,
+  Pencil,
   PawPrint,
   Phone,
   RefreshCw,
@@ -15,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { QRCodeSVG } from "qrcode.react";
 import { AppShell } from "@/components/veticare/app-shell";
 import { PageHeader } from "@/components/admin/page-header";
 import { MetricStrip } from "@/components/admin/metric-strip";
@@ -58,6 +60,9 @@ const Registrations = () => {
   const [page, setPage] = useState(1);
   const [issueTarget, setIssueTarget] = useState<PetRegistration | null>(null);
   const [detailTarget, setDetailTarget] = useState<PetRegistration | null>(null);
+  const [editingDetails, setEditingDetails] = useState(false);
+  const [savingDetails, setSavingDetails] = useState(false);
+  const [detailDraft, setDetailDraft] = useState({ name: "", species: "Dog" as "Dog" | "Cat", breed: "", gender: "Male" as "Male" | "Female", age: "", weight: "", color: "" });
   const [issuePetId, setIssuePetId] = useState("");
   const [issueRfid, setIssueRfid] = useState("");
   const [rfidScanStatus, setRfidScanStatus] = useState<"idle" | "waiting" | "checking" | "available" | "duplicate" | "error">("idle");
@@ -71,7 +76,7 @@ const Registrations = () => {
     setLoadError(null);
     const [{ data: petRows, error: petsError }, { data: profiles, error: profilesError }] = await Promise.all([
       supabase.from("pets").select("*").order("created_at", { ascending: false }),
-      supabase.from("profiles").select("id, email, full_name, phone").eq("role", "owner").order("full_name"),
+      supabase.from("profiles").select("id, email, full_name, phone, barangay").eq("role", "owner").order("full_name"),
     ]);
     if (petsError || profilesError) {
       const message = petsError?.message ?? profilesError?.message ?? "Unable to load registrations.";
@@ -86,6 +91,7 @@ const Registrations = () => {
       email: profile.email,
       name: profile.full_name || profile.email || "Pet owner",
       phone: profile.phone || "—",
+      barangay: profile.barangay || "",
     })));
     setRows((petRows ?? []).map((pet) => {
       const owner = ownerById.get(pet.owner_id);
@@ -181,6 +187,57 @@ const Registrations = () => {
     setIssueRfid("");
     setRfidScanStatus("idle");
     setRfidScanMessage("");
+  };
+
+  const openRegistrationDetails = (row: PetRegistration) => {
+    setDetailTarget(row);
+    setEditingDetails(false);
+    setDetailDraft({
+      name: row.name,
+      species: row.species,
+      breed: row.breed,
+      gender: row.gender,
+      age: row.age ?? "",
+      weight: row.weight ?? "",
+      color: row.color ?? "",
+    });
+  };
+
+  const saveRegistrationDetails = async () => {
+    if (!detailTarget) return;
+    if (!detailDraft.name.trim() || !detailDraft.breed.trim()) {
+      toast.error("Pet name and breed are required.");
+      return;
+    }
+    setSavingDetails(true);
+    const { error } = await supabase.from("pets").update({
+      name: detailDraft.name.trim(),
+      species: detailDraft.species,
+      breed: detailDraft.breed.trim(),
+      sex: detailDraft.gender,
+      age: detailDraft.age.trim() || "Not provided",
+      weight: detailDraft.weight.trim(),
+      color: detailDraft.color.trim(),
+    }).eq("id", detailTarget.id);
+    setSavingDetails(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    const updated = {
+      ...detailTarget,
+      name: detailDraft.name.trim(),
+      species: detailDraft.species,
+      breed: detailDraft.breed.trim(),
+      gender: detailDraft.gender,
+      age: detailDraft.age.trim() || "Not provided",
+      weight: detailDraft.weight.trim(),
+      color: detailDraft.color.trim(),
+    };
+    setDetailTarget(updated);
+    setRows((current) => current.map((row) => row.id === updated.id ? updated : row));
+    setEditingDetails(false);
+    toast.success("Pet profile updated.");
   };
 
   const validateScannedRfid = async (value: string) => {
@@ -532,12 +589,12 @@ const Registrations = () => {
                 role="button"
                 tabIndex={0}
                 aria-label={`View registration record for ${row.name}`}
-                onClick={() => setDetailTarget(row)}
+                onClick={() => openRegistrationDetails(row)}
                 onKeyDown={(event) => {
                   if (event.target !== event.currentTarget) return;
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
-                    setDetailTarget(row);
+                    openRegistrationDetails(row);
                   }
                 }}
                 className="grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2.5 px-3.5 py-3.5 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary sm:px-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1.05fr)_minmax(0,1.05fr)_minmax(0,0.85fr)_104px_116px] xl:gap-4 xl:px-5"
@@ -676,6 +733,7 @@ const Registrations = () => {
           email: owner.email,
           name: owner.name,
           phone: owner.phone,
+          barangay: owner.barangay,
         }))}
         onOpenChange={setAddPetOpen}
         onCreated={async (registration) => {
@@ -793,44 +851,99 @@ const Registrations = () => {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(detailTarget)} onOpenChange={(open) => { if (!open) setDetailTarget(null); }}>
+      <Dialog open={Boolean(detailTarget)} onOpenChange={(open) => { if (!open) { setDetailTarget(null); setEditingDetails(false); } }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto rounded-xl border-border bg-card sm:max-w-[520px]">
           <DialogHeader>
             <DialogTitle>Pet registration details</DialogTitle>
-            <DialogDescription>Review the submitted pet and owner information.</DialogDescription>
+            <DialogDescription>{editingDetails ? "Update the pet profile details." : "Review the submitted pet and owner information."}</DialogDescription>
           </DialogHeader>
           {detailTarget ? (
             <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <PetPhoto src={detailTarget.photoUrl ?? undefined} alt={detailTarget.name} species={detailTarget.species} className="size-20 shrink-0 rounded-xl" />
-                <div className="min-w-0">
-                  <p className="truncate text-lg font-bold text-foreground">{detailTarget.name}</p>
-                  <p className="text-xs text-muted-foreground">{detailTarget.breed} · {detailTarget.species} · {detailTarget.gender}</p>
-                  <div className="mt-2"><StatusPill status={detailTarget.status} /></div>
-                </div>
-              </div>
-              <dl className="grid grid-cols-2 gap-2">
-                {[
-                  ["Age", detailTarget.age || "Not provided"],
-                  ["Weight", detailTarget.weight || "Not provided"],
-                  ["Color / markings", detailTarget.color || "Not provided"],
-                  ["Owner", detailTarget.owner],
-                  ["Contact", detailTarget.phone],
-                  ["Submitted", detailTarget.registered],
-                  ["Pet ID", detailTarget.petId || "Assigned on approval"],
-                  ["RFID", detailTarget.rfidTag || "Scan during approval"],
-                  ["QR", detailTarget.qrCode || "Generated from Pet ID on approval"],
-                ].map(([label, value]) => (
-                  <div key={label} className="min-w-0 rounded-lg bg-secondary/60 p-2.5">
-                    <dt className="text-[9px] font-bold uppercase text-muted-foreground">{label}</dt>
-                    <dd className="mt-1 break-words text-[11px] font-semibold text-foreground">{value}</dd>
+              {editingDetails ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2 space-y-1.5">
+                    <Label htmlFor="detail-pet-name">Pet name</Label>
+                    <Input id="detail-pet-name" value={detailDraft.name} maxLength={80} onChange={(event) => setDetailDraft((current) => ({ ...current, name: event.target.value }))} />
                   </div>
-                ))}
-              </dl>
-              {detailTarget.status === "pending" ? (
-                <Button className="w-full" onClick={() => { beginApproval(detailTarget); setDetailTarget(null); }}>
-                  <Check className="size-4" />Scan RFID and approve
+                  <div className="space-y-1.5">
+                    <Label htmlFor="detail-pet-species">Species</Label>
+                    <select id="detail-pet-species" value={detailDraft.species} onChange={(event) => setDetailDraft((current) => ({ ...current, species: event.target.value as "Dog" | "Cat" }))} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                      <option value="Dog">Dog</option><option value="Cat">Cat</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="detail-pet-sex">Sex</Label>
+                    <select id="detail-pet-sex" value={detailDraft.gender} onChange={(event) => setDetailDraft((current) => ({ ...current, gender: event.target.value as "Male" | "Female" }))} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                      <option value="Male">Male</option><option value="Female">Female</option>
+                    </select>
+                  </div>
+                  <div className="col-span-2 space-y-1.5">
+                    <Label htmlFor="detail-pet-breed">Breed</Label>
+                    <Input id="detail-pet-breed" value={detailDraft.breed} maxLength={100} onChange={(event) => setDetailDraft((current) => ({ ...current, breed: event.target.value }))} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="detail-pet-age">Age</Label>
+                    <Input id="detail-pet-age" value={detailDraft.age} maxLength={40} onChange={(event) => setDetailDraft((current) => ({ ...current, age: event.target.value }))} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="detail-pet-weight">Weight</Label>
+                    <Input id="detail-pet-weight" value={detailDraft.weight} maxLength={30} onChange={(event) => setDetailDraft((current) => ({ ...current, weight: event.target.value }))} />
+                  </div>
+                  <div className="col-span-2 space-y-1.5">
+                    <Label htmlFor="detail-pet-color">Color / markings</Label>
+                    <Input id="detail-pet-color" value={detailDraft.color} maxLength={80} onChange={(event) => setDetailDraft((current) => ({ ...current, color: event.target.value }))} />
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-3">
+                    <PetPhoto src={detailTarget.photoUrl ?? undefined} alt={detailTarget.name} species={detailTarget.species} className="size-20 shrink-0 rounded-xl" />
+                    <div className="min-w-0">
+                      <p className="truncate text-lg font-bold text-foreground">{detailTarget.name}</p>
+                      <p className="text-xs text-muted-foreground">{detailTarget.breed} · {detailTarget.species} · {detailTarget.gender}</p>
+                      <div className="mt-2"><StatusPill status={detailTarget.status} /></div>
+                    </div>
+                  </div>
+                  <dl className="grid grid-cols-2 gap-2">
+                    {[
+                      ["Age", detailTarget.age || "Not provided"],
+                      ["Weight", detailTarget.weight || "Not provided"],
+                      ["Color / markings", detailTarget.color || "Not provided"],
+                      ["Owner", detailTarget.owner],
+                      ["Contact", detailTarget.phone],
+                      ["Submitted", detailTarget.registered],
+                      ["Pet ID", detailTarget.petId || "Assigned on approval"],
+                      ["RFID", detailTarget.rfidTag || "Scan during approval"],
+                    ].map(([label, value]) => (
+                      <div key={label} className="min-w-0 rounded-lg bg-secondary/60 p-2.5">
+                        <dt className="text-[9px] font-bold uppercase text-muted-foreground">{label}</dt>
+                        <dd className="mt-1 break-words text-[11px] font-semibold text-foreground">{value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-3">
+                    <div className="min-w-0">
+                      <p className="text-[9px] font-bold uppercase text-muted-foreground">QR code</p>
+                      <p className="mt-1 break-all text-[10px] font-semibold text-foreground">{detailTarget.qrCode || "Available after approval"}</p>
+                    </div>
+                    {detailTarget.qrCode ? <QRCodeSVG value={detailTarget.qrCode} size={88} level="M" marginSize={1} className="shrink-0 rounded bg-white p-1" title={`QR code for ${detailTarget.petId ?? detailTarget.name}`} /> : null}
+                  </div>
+                </>
+              )}
+              {editingDetails ? (
+                <div className="flex gap-2">
+                  <Button variant="outline" className="flex-1" onClick={() => setEditingDetails(false)}>Cancel</Button>
+                  <Button className="flex-1" disabled={savingDetails} onClick={() => void saveRegistrationDetails()}>{savingDetails ? "Saving…" : "Save profile"}</Button>
+                </div>
+              ) : (
+                <Button variant="outline" className="w-full" onClick={() => setEditingDetails(true)}>
+                  <Pencil className="size-4" />Edit profile
                 </Button>
+              )}
+              {detailTarget.status === "pending" ? (
+                !editingDetails ? <Button className="w-full" onClick={() => { beginApproval(detailTarget); setDetailTarget(null); }}>
+                  <Check className="size-4" />Scan RFID and approve
+                </Button> : null
               ) : null}
             </div>
           ) : null}

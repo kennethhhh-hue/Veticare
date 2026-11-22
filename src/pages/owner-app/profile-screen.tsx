@@ -5,7 +5,6 @@ import {
   ChevronRight,
   FileText,
   HelpCircle,
-  LayoutDashboard,
   LogOut,
   MapPin,
   ShieldCheck,
@@ -18,6 +17,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { BarangaySelect } from "@/components/owner-app/barangay-select";
+import { OcvasContactInfo } from "@/components/veticare/ocvas-contact-info";
+import { ProfilePhoto } from "@/components/veticare/profile-photo";
 import { signOut } from "@/integrations/supabase/auth-context";
 import type { OwnerProfile, OwnerRequest } from "@/lib/owner-preview-store";
 
@@ -32,26 +33,37 @@ export function ProfileScreen({
   petCount: number;
   adoptionCount: number;
   requests: OwnerRequest[];
-  onSave: (profile: OwnerProfile) => void;
+  onSave: (profile: OwnerProfile) => Promise<boolean>;
 }) {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState(() => localStorage.getItem("veticare-owner-reminders") !== "off");
   const [editOpen, setEditOpen] = useState(false);
   const [documentsOpen, setDocumentsOpen] = useState(false);
+  const [contactOpen, setContactOpen] = useState(false);
   const [draft, setDraft] = useState(profile);
 
-  const saveProfile = (event: FormEvent<HTMLFormElement>) => {
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  const saveProfile = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!draft.barangay.trim()) {
       toast.error("Select your barangay in Batangas City.");
       return;
     }
-    onSave(draft);
+    setSavingProfile(true);
+    const saved = await onSave(draft);
+    setSavingProfile(false);
+    if (!saved) return;
     setEditOpen(false);
-    toast.success("Profile updated in this preview.");
+    toast.success("Profile changes saved.");
   };
 
   const initials = profile.fullName.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase();
+  const updatePhoto = (avatarUrl: string) => {
+    const updated = { ...profile, avatarUrl };
+    setDraft((current) => ({ ...current, avatarUrl }));
+    onSave(updated);
+  };
 
   return (
     <div className="pb-6">
@@ -63,7 +75,9 @@ export function ProfileScreen({
       <section className="mt-4 px-5">
         <div className="surface-card rounded-2xl border border-border bg-card p-4">
           <div className="flex items-center gap-3">
-            <span className="grid size-12 shrink-0 place-items-center rounded-full bg-primary text-[14px] font-bold text-primary-foreground">{initials}</span>
+            <span className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-full bg-primary text-[14px] font-bold text-primary-foreground">
+              {profile.avatarUrl ? <img src={profile.avatarUrl} alt={`${profile.fullName} profile`} className="size-full object-cover" /> : initials}
+            </span>
             <div className="min-w-0 flex-1">
               <p className="truncate text-[15px] font-extrabold text-foreground">{profile.fullName}</p>
               <p className="truncate text-[10px] text-muted-foreground">{profile.email}</p>
@@ -113,9 +127,9 @@ export function ProfileScreen({
             <span className="min-w-0 flex-1"><span className="block text-[11.5px] font-semibold text-foreground">My documents</span><span className="block text-[9px] text-muted-foreground">Sample documents and requirements</span></span>
             <ChevronRight className="size-3.5 text-muted-foreground" />
           </button>
-          <button type="button" onClick={() => toast.info("City Veterinary Office hotline", { description: "(046) 417-3320 • Monday to Friday, 8:00 AM–5:00 PM" })} className="flex w-full items-center gap-2.5 px-3.5 py-3 text-left hover:bg-secondary/50">
+          <button type="button" onClick={() => setContactOpen(true)} className="flex w-full items-center gap-2.5 px-3.5 py-3 text-left hover:bg-secondary/50">
             <span className="grid size-7 place-items-center rounded-lg bg-secondary text-foreground/70"><HelpCircle className="size-3.5" /></span>
-            <span className="min-w-0 flex-1"><span className="block text-[11.5px] font-semibold text-foreground">Help &amp; support</span><span className="block text-[9px] text-muted-foreground">City vet office hotline</span></span>
+            <span className="min-w-0 flex-1"><span className="block text-[11.5px] font-semibold text-foreground">Help &amp; support</span><span className="block text-[9px] text-muted-foreground">OCVAS contact details and office hours</span></span>
             <ChevronRight className="size-3.5 text-muted-foreground" />
           </button>
         </div>
@@ -141,10 +155,6 @@ export function ProfileScreen({
       <section className="mt-4 px-5">
         <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Veticare</p>
         <div className="mt-2 overflow-hidden rounded-2xl border border-border bg-card">
-          <button type="button" onClick={() => navigate("/")} className="flex w-full items-center gap-2.5 border-b border-border px-3.5 py-3 text-left hover:bg-secondary/50">
-            <span className="grid size-7 place-items-center rounded-lg bg-primary-soft text-primary"><LayoutDashboard className="size-3.5" /></span>
-            <span className="flex-1 text-[11.5px] font-semibold text-foreground">Staff dashboard</span><ChevronRight className="size-3.5 text-muted-foreground" />
-          </button>
           <button type="button" onClick={async () => { const { error } = await signOut(); if (error) { toast.error(error.message); return; } navigate("/login", { replace: true }); }} className="flex w-full items-center gap-2.5 px-3.5 py-3 text-left hover:bg-destructive/5">
             <span className="grid size-7 place-items-center rounded-lg bg-destructive/10 text-destructive"><LogOut className="size-3.5" /></span>
             <span className="flex-1 text-[11.5px] font-semibold text-destructive">Sign out</span>
@@ -160,11 +170,16 @@ export function ProfileScreen({
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto rounded-xl border-border bg-card sm:max-w-[440px]">
           <DialogHeader><DialogTitle>Edit profile</DialogTitle><DialogDescription>Changes are saved to this browser preview.</DialogDescription></DialogHeader>
-          <form onSubmit={saveProfile} className="space-y-3">
+          <form onSubmit={(event) => void saveProfile(event)} className="space-y-3">
+            <ProfilePhoto name={draft.fullName || "Owner"} photoUrl={draft.avatarUrl} onPhotoUpdated={updatePhoto} />
+            <div className="space-y-1.5">
+              <Label htmlFor="owner-profile-email">Email address</Label>
+              <Input id="owner-profile-email" type="email" value={draft.email} readOnly aria-readonly="true" className="bg-secondary/50" />
+              <p className="text-[9px] text-muted-foreground">Email changes require a separate verification step.</p>
+            </div>
             {([
               ["name", "Full name"],
               ["phone", "Mobile number"],
-              ["email", "Email address"],
               ["address", "Street / house address"],
               ["barangay", "Barangay"],
             ] as const).map(([field, label]) => (
@@ -180,7 +195,7 @@ export function ProfileScreen({
                 ) : (
                   <Input
                     id={`owner-profile-${field}`}
-                    type={field === "email" ? "email" : "text"}
+                    type="text"
                     required
                     value={field === "name" ? draft.fullName : draft[field]}
                     onChange={(event) => setDraft((current) => ({ ...current, [field === "name" ? "fullName" : field]: event.target.value }))}
@@ -188,7 +203,7 @@ export function ProfileScreen({
                 )}
               </div>
             ))}
-            <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button><Button type="submit">Save profile</Button></div>
+            <div className="flex justify-end gap-2"><Button type="button" variant="outline" disabled={savingProfile} onClick={() => setEditOpen(false)}>Cancel</Button><Button type="submit" disabled={savingProfile}>{savingProfile ? "Saving…" : "Save profile"}</Button></div>
           </form>
         </DialogContent>
       </Dialog>
@@ -200,6 +215,17 @@ export function ProfileScreen({
             {["Government ID • Verified", "Proof of address • Verified", "Pet ownership declaration • Pending"].map((document) => <li key={document} className="flex items-center gap-2 p-3 text-[11px] text-foreground"><FileText className="size-4 text-primary" />{document}</li>)}
           </ul>
           <Button variant="outline" onClick={() => setDocumentsOpen(false)}>Close</Button>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={contactOpen} onOpenChange={setContactOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-xl border-border bg-card sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>OCVAS contact information</DialogTitle>
+            <DialogDescription>Contact the Office of the City Veterinarian and Agricultural Services.</DialogDescription>
+          </DialogHeader>
+          <OcvasContactInfo compact />
+          <Button type="button" variant="outline" onClick={() => setContactOpen(false)}>Close</Button>
         </DialogContent>
       </Dialog>
     </div>

@@ -1,4 +1,4 @@
-import { initialScans, type ScanEntry, type PersonnelPet } from "@/data/personnel";
+import { type ScanEntry, type PersonnelPet } from "@/data/personnel";
 
 const SCANS_KEY = "veticare-personnel-preview-scans";
 const VERIFIED_KEY = "veticare-personnel-preview-verified";
@@ -18,7 +18,24 @@ function readJson<T>(key: string, fallback: T): T {
   }
 }
 
-export const readScans = () => readJson<ScanEntry[]>(SCANS_KEY, initialScans);
+const formerDemoPetIds = new Set([
+  "VC-2026-0148",
+  "VC-2026-0122",
+  "VC-2026-0141",
+  "VC-2026-0136",
+  "VC-2026-0139",
+  "VC-2026-0137",
+  "VC-2026-0145",
+  "VC-2026-0150",
+  "VC-2026-0152",
+]);
+
+export const readScans = () => {
+  const saved = readJson<ScanEntry[]>(SCANS_KEY, []);
+  const scans = saved.filter((scan) => !formerDemoPetIds.has(scan.petId));
+  if (scans.length !== saved.length) localStorage.setItem(SCANS_KEY, JSON.stringify(scans));
+  return scans;
+};
 export const writeScans = (scans: ScanEntry[]) => localStorage.setItem(SCANS_KEY, JSON.stringify(scans));
 export const readVerifiedIds = () => readJson<string[]>(VERIFIED_KEY, []);
 export const writeVerifiedIds = (ids: string[]) => localStorage.setItem(VERIFIED_KEY, JSON.stringify(ids));
