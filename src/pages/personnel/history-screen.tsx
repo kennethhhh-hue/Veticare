@@ -35,7 +35,7 @@ export function HistoryScreen({ scans, pets }: HistoryScreenProps) {
   const visible = scans.filter((scan) => filter === "all" || scan.result === filter);
 
   if (selected) {
-    const pet = pets.find((item) => item.id === selected.petId);
+    const pet = pets.find((item) => item.recordId === selected.petRecordId);
     return (
       <div className="pb-6">
         <header className="px-5 pt-5">
@@ -110,7 +110,7 @@ export function HistoryScreen({ scans, pets }: HistoryScreenProps) {
           Scan history
         </h1>
         <p className="mt-1.5 text-[11px] text-muted-foreground">
-          {scans.length} scans logged by you and your shift team.
+          {scans.length} scans logged by you.
         </p>
       </header>
 

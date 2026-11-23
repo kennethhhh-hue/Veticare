@@ -18,6 +18,7 @@ import { MetricStrip } from "@/components/admin/metric-strip";
 import { FilterSelect } from "@/components/admin/filter-select";
 import { StatusPill } from "@/components/admin/status-pill";
 import { Pagination } from "@/components/admin/pagination";
+import { PersonnelImpoundReports } from "@/components/admin/personnel-impound-reports";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -295,6 +296,8 @@ const ImpoundedDogs = () => {
       />
 
       <MetricStrip metrics={metrics} />
+
+      <PersonnelImpoundReports />
 
       <section className="surface-card fade-up mt-4 overflow-hidden rounded-2xl border border-border bg-card sm:mt-5">
         <div className="flex flex-col gap-2.5 p-3.5 sm:p-4 lg:flex-row lg:flex-wrap lg:items-center">

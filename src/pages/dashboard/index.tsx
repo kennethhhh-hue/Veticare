@@ -6,6 +6,7 @@ import { AppShell } from "@/components/veticare/app-shell";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { ActivityChart } from "@/components/dashboard/activity-chart";
 import { VerificationQueue } from "@/components/dashboard/verification-queue";
+import { PersonnelReviewQueue } from "@/components/dashboard/personnel-review-queue";
 import { QuickActions } from "@/components/dashboard/quick-actions";
 import { ActivityFeed } from "@/components/dashboard/activity-feed";
 import { SummaryCards } from "@/components/dashboard/summary-cards";
@@ -196,6 +197,7 @@ const Dashboard = () => {
         <div className="space-y-4 sm:space-y-5">
           <ActivityChart range={range} onRangeChange={setRange} />
           <VerificationQueue id="verification-queue" />
+          <PersonnelReviewQueue />
         </div>
 
         <div className="space-y-4 sm:space-y-5 xl:sticky xl:top-[88px]">

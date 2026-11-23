@@ -3360,6 +3360,45 @@ export type Database = {
   }
   public: {
     Tables: {
+      personnel_impound_reports: {
+        Row: { id: string; pet_record_id: string; reported_by: string; location_found: string; date_impounded: string; reason: string; status: string; created_at: string; reviewed_at: string | null; reviewed_by: string | null }
+        Insert: { id?: string; pet_record_id: string; reported_by?: string; location_found: string; date_impounded: string; reason: string; status?: string; created_at?: string; reviewed_at?: string | null; reviewed_by?: string | null }
+        Update: { id?: string; pet_record_id?: string; reported_by?: string; location_found?: string; date_impounded?: string; reason?: string; status?: string; created_at?: string; reviewed_at?: string | null; reviewed_by?: string | null }
+        Relationships: [
+          { foreignKeyName: "personnel_impound_reports_pet_record_id_fkey"; columns: ["pet_record_id"]; referencedRelation: "pets"; referencedColumns: ["id"] },
+          { foreignKeyName: "personnel_impound_reports_reported_by_fkey"; columns: ["reported_by"]; referencedRelation: "profiles"; referencedColumns: ["id"] },
+          { foreignKeyName: "personnel_impound_reports_reviewed_by_fkey"; columns: ["reviewed_by"]; referencedRelation: "profiles"; referencedColumns: ["id"] },
+        ]
+      }
+      personnel_scans: {
+        Row: { id: string; pet_record_id: string; scanned_by: string; result: string; note: string; created_at: string }
+        Insert: { id?: string; pet_record_id: string; scanned_by?: string; result: string; note?: string; created_at?: string }
+        Update: { id?: string; pet_record_id?: string; scanned_by?: string; result?: string; note?: string; created_at?: string }
+        Relationships: [
+          { foreignKeyName: "personnel_scans_pet_record_id_fkey"; columns: ["pet_record_id"]; referencedRelation: "pets"; referencedColumns: ["id"] },
+          { foreignKeyName: "personnel_scans_scanned_by_fkey"; columns: ["scanned_by"]; referencedRelation: "profiles"; referencedColumns: ["id"] },
+        ]
+      }
+      personnel_verifications: {
+        Row: { id: string; pet_record_id: string; verified_by: string; created_at: string }
+        Insert: { id?: string; pet_record_id: string; verified_by?: string; created_at?: string }
+        Update: { id?: string; pet_record_id?: string; verified_by?: string; created_at?: string }
+        Relationships: [
+          { foreignKeyName: "personnel_verifications_pet_record_id_fkey"; columns: ["pet_record_id"]; referencedRelation: "pets"; referencedColumns: ["id"] },
+          { foreignKeyName: "personnel_verifications_verified_by_fkey"; columns: ["verified_by"]; referencedRelation: "profiles"; referencedColumns: ["id"] },
+        ]
+      }
+      personnel_review_flags: {
+        Row: { id: string; pet_record_id: string; reported_by: string; scan_id: string | null; status: string; created_at: string; resolved_at: string | null; resolved_by: string | null }
+        Insert: { id?: string; pet_record_id: string; reported_by?: string; scan_id?: string | null; status?: string; created_at?: string; resolved_at?: string | null; resolved_by?: string | null }
+        Update: { id?: string; pet_record_id?: string; reported_by?: string; scan_id?: string | null; status?: string; created_at?: string; resolved_at?: string | null; resolved_by?: string | null }
+        Relationships: [
+          { foreignKeyName: "personnel_review_flags_pet_record_id_fkey"; columns: ["pet_record_id"]; referencedRelation: "pets"; referencedColumns: ["id"] },
+          { foreignKeyName: "personnel_review_flags_reported_by_fkey"; columns: ["reported_by"]; referencedRelation: "profiles"; referencedColumns: ["id"] },
+          { foreignKeyName: "personnel_review_flags_scan_id_fkey"; columns: ["scan_id"]; referencedRelation: "personnel_scans"; referencedColumns: ["id"] },
+          { foreignKeyName: "personnel_review_flags_resolved_by_fkey"; columns: ["resolved_by"]; referencedRelation: "profiles"; referencedColumns: ["id"] },
+        ]
+      }
       pets: {
         Row: {
           age: string

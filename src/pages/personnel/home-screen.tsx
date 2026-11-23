@@ -3,22 +3,20 @@ import {
   ArrowLeft,
   BadgeCheck,
   Bell,
-  BellRing,
   ChevronRight,
   FileCheck2,
   QrCode,
-  MapPin,
   ScanLine,
   TriangleAlert,
 } from "lucide-react";
 import {
-  getShiftStats,
   scanResultLabels,
   type ScanEntry,
   type ScanResult,
 } from "@/data/personnel";
-import type { PersonnelImpoundNotice } from "@/lib/personnel-preview-store";
+import type { PersonnelImpoundReport } from "@/pages/personnel";
 import type { OwnerNotification } from "@/pages/owner-app/notifications-screen";
+import { getPhilippineDateKey } from "@/lib/philippine-date";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
@@ -38,7 +36,14 @@ const resultDot: Record<ScanResult, string> = {
 
 interface HomeScreenProps {
   scans: ScanEntry[];
-  impoundNotices: PersonnelImpoundNotice[];
+  verifiedCount: number;
+  reviewCount: number;
+  activityReady: boolean;
+  today: string;
+  impoundReports: PersonnelImpoundReport[];
+  impoundReportsLoading: boolean;
+  impoundReportsError: string | null;
+  onRefreshImpoundReports: () => void;
   personnelName: string;
   notifications: OwnerNotification[];
   onMarkNotificationRead: (notification: OwnerNotification) => void;
@@ -46,17 +51,17 @@ interface HomeScreenProps {
   onOpenHistory: () => void;
 }
 
-export function HomeScreen({ scans, impoundNotices, personnelName, notifications, onMarkNotificationRead, onOpenScan, onOpenHistory }: HomeScreenProps) {
-  const stats = getShiftStats(scans);
+export function HomeScreen({ scans, verifiedCount, reviewCount, activityReady, today, impoundReports, impoundReportsLoading, impoundReportsError, onRefreshImpoundReports, personnelName, notifications, onMarkNotificationRead, onOpenScan, onOpenHistory }: HomeScreenProps) {
+  const todaysScans = scans.filter((scan) => getPhilippineDateKey(new Date(scan.createdAt)) === today);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [selectedNotification, setSelectedNotification] = useState<OwnerNotification | null>(null);
   const unreadNotifications = notifications.filter((notification) => !notification.read_at).length;
 
   const metrics = [
-    { label: "QR scans", value: stats.scans, icon: QrCode, tone: "bg-primary-soft text-primary" },
-    { label: "Pets verified", value: stats.verified, icon: BadgeCheck, tone: "bg-success/10 text-success" },
-    { label: "Registered scanned", value: stats.registered, icon: FileCheck2, tone: "bg-info/12 text-info" },
-    { label: "Needs review", value: stats.review, icon: TriangleAlert, tone: "bg-warning/12 text-warning" },
+    { label: "Scans today", value: todaysScans.length, icon: QrCode, tone: "bg-primary-soft text-primary" },
+    { label: "Verified today", value: verifiedCount, icon: BadgeCheck, tone: "bg-success/10 text-success" },
+    { label: "Pets scanned", value: new Set(todaysScans.map((scan) => scan.petRecordId)).size, icon: FileCheck2, tone: "bg-info/12 text-info" },
+    { label: "Open reviews", value: reviewCount, icon: TriangleAlert, tone: "bg-warning/12 text-warning" },
   ];
 
   return (
@@ -168,7 +173,7 @@ export function HomeScreen({ scans, impoundNotices, personnelName, notifications
                 </p>
               </div>
               <p className="num mt-1.5 text-[20px] font-extrabold leading-none text-foreground">
-                {metric.value}
+                {activityReady ? metric.value : "—"}
               </p>
             </div>
           );
@@ -181,7 +186,7 @@ export function HomeScreen({ scans, impoundNotices, personnelName, notifications
             <h2 className="text-[14px] font-extrabold tracking-[-0.02em] text-foreground">
               Recent scans
             </h2>
-            <p className="text-[10px] text-muted-foreground">Your field activity this shift</p>
+            <p className="text-[10px] text-muted-foreground">Your recent recorded activity</p>
           </div>
           <button
             type="button"
@@ -220,36 +225,38 @@ export function HomeScreen({ scans, impoundNotices, personnelName, notifications
               </button>
             </li>
           ))}
-        </ul> : <p className="mx-5 mt-2.5 rounded-xl border border-dashed border-border px-3 py-5 text-center text-[10px] text-muted-foreground">No scans have been recorded yet.</p>}
+        </ul> : <p className="mx-5 mt-2.5 rounded-xl border border-dashed border-border px-3 py-5 text-center text-[10px] text-muted-foreground">{activityReady ? "No scans have been recorded yet." : "Scan history is unavailable."}</p>}
       </section>
 
-      {impoundNotices.length ? (
-        <section className="mt-4 px-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="flex items-center gap-1.5 text-[13px] font-extrabold text-foreground"><BellRing className="size-3.5 text-warning" />Impound notices</h2>
-              <p className="text-[9.5px] text-muted-foreground">Owner and barangay notice previews</p>
-            </div>
-            <span className="num rounded-full bg-warning/12 px-2 py-1 text-[9px] font-bold text-warning">{impoundNotices.length}</span>
+      <section className="mt-4 px-5">
+        <h2 className="text-[13px] font-extrabold text-foreground">Recent impound reports</h2>
+        <p className="text-[9.5px] text-muted-foreground">Your reports and their review status</p>
+        {impoundReportsLoading ? (
+          <p role="status" className="mt-2 text-xs text-muted-foreground">Loading impound reports...</p>
+        ) : impoundReportsError ? (
+          <div role="alert" className="mt-2 text-xs text-destructive">
+            <p>Unable to load impound reports: {impoundReportsError}</p>
+            <button type="button" onClick={onRefreshImpoundReports} className="mt-1 font-bold underline">Try again</button>
           </div>
+        ) : impoundReports.length ? (
           <ul className="mt-2 space-y-2">
-            {impoundNotices.slice(0, 3).map((notice) => (
-              <li key={notice.id} className="rounded-xl border border-border bg-card p-2.5">
+            {impoundReports.map((report) => (
+              <li key={report.id} className="rounded-xl border border-border bg-card p-2.5">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0"><p className="truncate text-[10.5px] font-bold text-foreground">{notice.petName} • {notice.petId}</p><p className="mt-0.5 truncate text-[9px] text-muted-foreground">Found: {notice.locationFound} • {notice.dateImpounded}</p></div>
-                  <span className="shrink-0 rounded-full bg-secondary px-1.5 py-0.5 text-[7.5px] font-bold uppercase text-muted-foreground">Preview only</span>
+                  <div className="min-w-0">
+                    <p className="break-words text-[10.5px] font-bold text-foreground">{report.pets?.name ?? "Pet unavailable"} • {report.pets?.pet_id ?? report.pets?.id ?? report.pet_record_id}</p>
+                    <p className="mt-0.5 break-words text-[9px] text-muted-foreground">Found: {report.location_found} • {report.date_impounded}</p>
+                  </div>
+                  <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[8.5px] font-bold ${report.status === "reviewed" ? "bg-success/10 text-success" : "bg-warning/12 text-warning"}`}>
+                    {report.status === "reviewed" ? "Reviewed" : "Pending review"}
+                  </span>
                 </div>
-                <div className="mt-2 grid grid-cols-2 gap-1.5">
-                  <span className="flex min-w-0 items-center gap-1 rounded-md bg-secondary/60 px-1.5 py-1 text-[8.5px] text-foreground"><BellRing className="size-2.5 shrink-0 text-primary"/><span className="truncate">Owner: {notice.ownerName} • {notice.ownerPhone}</span></span>
-                  <span className="flex min-w-0 items-center gap-1 rounded-md bg-secondary/60 px-1.5 py-1 text-[8.5px] text-foreground"><MapPin className="size-2.5 shrink-0 text-primary"/><span className="truncate">Barangay {notice.barangay}</span></span>
-                </div>
-                <p className="mt-1 text-[8px] text-muted-foreground">RFID: {notice.rfidTag ?? "No collar tag linked"}</p>
+                <p className="mt-1 break-words text-[9px] text-muted-foreground">{report.reason}</p>
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-[8.5px] leading-relaxed text-muted-foreground">Actual SMS/email notification requires backend delivery setup.</p>
-        </section>
-      ) : null}
+        ) : <p className="mt-2 text-xs text-muted-foreground">No impound reports submitted yet.</p>}
+      </section>
 
       <section className="mt-4 px-5">
         <div className="rounded-xl border border-border bg-secondary/40 p-3">
@@ -257,7 +264,7 @@ export function HomeScreen({ scans, impoundNotices, personnelName, notifications
             Scope of access
           </p>
           <p className="mt-1 text-[9.5px] leading-relaxed text-muted-foreground">
-            Field verification only. Shelter and adoption statistics are managed by OCVAS.
+            Personnel can verify pets and submit impound reports. Shelter intake and adoptions are managed by OCVAS admins.
           </p>
         </div>
       </section>

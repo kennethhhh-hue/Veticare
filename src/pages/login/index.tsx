@@ -23,10 +23,12 @@ const Login = () => {
   const [creatingAccount, setCreatingAccount] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [signupMessage, setSignupMessage] = useState<string | null>(null);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
+    setSignupMessage(null);
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())) {
       setError("Enter a valid email address.");
@@ -47,7 +49,7 @@ const Login = () => {
         email: email.trim(),
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/login`,
+          emailRedirectTo: `${window.location.origin}/app`,
           data: {
             full_name: fullName.trim(),
             phone: phone.trim(),
@@ -56,17 +58,26 @@ const Login = () => {
           },
         },
       });
-      setSubmitting(false);
       if (signUpError) {
+        setSubmitting(false);
         setError(signUpError.message);
         return;
       }
       if (data.session) {
-        toast.success("Account created. Your information is awaiting admin review.");
-        navigate("/app", { replace: true });
-      } else {
-        toast.success("Check your email to confirm your account.");
+        const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
+        if (signOutError) {
+          setSubmitting(false);
+          setError("Your account was created, but the session could not be closed. Please sign out before continuing.");
+          return;
+        }
       }
+      setSubmitting(false);
+      setCreatingAccount(false);
+      setPassword("");
+      setSignupMessage(data.session
+        ? "Your account was created. Sign in to check its approval status."
+        : "Check your email to confirm your account, then sign in. Admin approval is still required.");
+      navigate("/login", { replace: true });
       return;
     }
 
@@ -175,6 +186,7 @@ const Login = () => {
               </div>
             </div>
 
+            {signupMessage ? <p className="rounded-lg bg-primary-soft p-3 text-[12px] text-foreground" role="status">{signupMessage}</p> : null}
             {error ? <p className="text-[12px] text-destructive" role="alert">{error}</p> : null}
 
             <Button type="submit" disabled={submitting} className="h-11 w-full font-bold">
@@ -194,6 +206,7 @@ const Login = () => {
               onClick={() => {
                 setCreatingAccount((current) => !current);
                 setError(null);
+                setSignupMessage(null);
               }}
               className="mt-1 text-[12px] font-bold text-primary hover:underline"
             >

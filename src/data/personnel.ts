@@ -1,9 +1,10 @@
 export type RegistrationState = "active" | "expiring" | "expired" | "unregistered";
-export type VaccinationState = "complete" | "due" | "overdue";
+export type VaccinationState = "complete" | "due" | "overdue" | "unknown";
 export type ScanResult = "verified" | "flagged" | "expired" | "unregistered";
 
 export interface PersonnelPet {
   id: string;
+  recordId: string;
   name: string;
   species: "Dog" | "Cat";
   breed: string;
@@ -26,24 +27,14 @@ export interface PersonnelPet {
 
 export interface ScanEntry {
   id: string;
+  petRecordId: string;
   petId: string;
   petName: string;
+  createdAt: string;
   scannedAt: string;
   result: ScanResult;
   officer: string;
   note: string;
-}
-
-export function getShiftStats(scans: ScanEntry[]) {
-  const registeredScanned = new Set(
-    scans.filter((scan) => scan.result === "verified").map((scan) => scan.petId),
-  );
-  return {
-    scans: scans.length,
-    verified: scans.filter((scan) => scan.result === "verified").length,
-    registered: registeredScanned.size,
-    review: scans.filter((scan) => scan.result !== "verified").length,
-  };
 }
 
 export const registrationLabels: Record<RegistrationState, string> = {
@@ -57,6 +48,7 @@ export const vaccinationLabels: Record<VaccinationState, string> = {
   complete: "Vaccination complete",
   due: "Booster due",
   overdue: "Overdue",
+  unknown: "No vaccination record linked",
 };
 
 export const scanResultLabels: Record<ScanResult, string> = {

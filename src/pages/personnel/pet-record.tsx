@@ -32,6 +32,7 @@ const vaccinationTone: Record<VaccinationState, string> = {
   complete: "bg-success/10 text-success",
   due: "bg-warning/12 text-warning",
   overdue: "bg-destructive/10 text-destructive",
+  unknown: "bg-secondary text-muted-foreground",
 };
 
 interface PetRecordProps {
@@ -134,7 +135,7 @@ export function PetRecord({
                   ? "text-success"
                   : pet.vaccination === "due"
                     ? "text-warning"
-                    : "text-destructive",
+                    : pet.vaccination === "overdue" ? "text-destructive" : "text-muted-foreground",
               )}
             >
               <Syringe className="size-2.5" />
@@ -222,7 +223,7 @@ export function PetRecord({
             className="h-10 w-full rounded-xl border-warning/30 bg-warning/5 text-[11.5px] font-bold text-foreground"
           >
             <BellRing className="size-4 text-warning" />
-            Log impound &amp; prepare notices
+            Report impound
           </Button>
         ) : null}
         {onVerify ? (

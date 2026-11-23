@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { getPhilippineDateKey } from "@/lib/philippine-date";
 import { PetRecord } from "@/pages/personnel/pet-record";
 import {
   type PersonnelPet,
@@ -34,19 +35,25 @@ const resultNote = (pet: PersonnelPet, result: ScanResult) => {
 
 interface ScannerScreenProps {
   pets: PersonnelPet[];
-  onRecord: (pet: PersonnelPet, result: ScanResult, note: string) => string;
-  onFlagScan: (scanId: string) => void;
-  onImpound: (pet: PersonnelPet, locationFound: string, dateImpounded: string, reason: string) => void;
+  reviewIds: string[];
+  onRecord: (pet: PersonnelPet, result: ScanResult, note: string) => Promise<string | null>;
+  onFlagScan: (scanId: string, petId: string) => Promise<boolean>;
+  onImpound: (pet: PersonnelPet, locationFound: string, dateImpounded: string, reason: string) => Promise<boolean>;
 }
 
-export function ScannerScreen({ pets, onRecord, onFlagScan, onImpound }: ScannerScreenProps) {
+export function ScannerScreen({ pets, reviewIds, onRecord, onFlagScan, onImpound }: ScannerScreenProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const cameraControlsRef = useRef<{ stop: () => void } | null>(null);
   const scanCompletedRef = useRef(false);
+  const submittingRef = useRef(false);
+  const flaggingRef = useRef(false);
+  const impoundSubmittingRef = useRef(false);
   const [phase, setPhase] = useState<"idle" | "result">("idle");
   const [cameraStarting, setCameraStarting] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [flagging, setFlagging] = useState(false);
   const [pet, setPet] = useState<PersonnelPet | null>(null);
   const [scanId, setScanId] = useState<string | null>(null);
   const [flagged, setFlagged] = useState(false);
@@ -54,18 +61,38 @@ export function ScannerScreen({ pets, onRecord, onFlagScan, onImpound }: Scanner
   const [manualValue, setManualValue] = useState("");
   const [manualError, setManualError] = useState<string | null>(null);
   const [impoundOpen, setImpoundOpen] = useState(false);
+  const [impoundSubmitting, setImpoundSubmitting] = useState(false);
+  const [impoundError, setImpoundError] = useState<string | null>(null);
   const [impoundLocation, setImpoundLocation] = useState("");
-  const [impoundDate, setImpoundDate] = useState(new Date().toISOString().slice(0, 10));
+  const [impoundDate, setImpoundDate] = useState(getPhilippineDateKey);
   const [impoundReason, setImpoundReason] = useState("");
 
   useEffect(() => () => cameraControlsRef.current?.stop(), []);
 
-  const finishScan = (nextPet: PersonnelPet) => {
+  const finishScan = async (nextPet: PersonnelPet) => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setRecording(true);
     const result = deriveResult(nextPet);
-    const id = onRecord(nextPet, result, resultNote(nextPet, result));
+    let id: string | null;
+    try {
+      id = await onRecord(nextPet, result, resultNote(nextPet, result));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to record the scan.");
+      id = null;
+    } finally {
+      submittingRef.current = false;
+      setRecording(false);
+    }
+    if (!id) {
+      setCameraError("Scan was not recorded. Try again.");
+      return;
+    }
     setPet(nextPet);
     setScanId(id);
     setFlagged(false);
+    setManualOpen(false);
+    setManualValue("");
     setPhase("result");
     if (result === "verified") {
       toast.success(`${nextPet.name} verified`, {
@@ -77,7 +104,7 @@ export function ScannerScreen({ pets, onRecord, onFlagScan, onImpound }: Scanner
           ? "Registration is expired. Advise the owner to renew."
           : result === "unregistered"
             ? "No active registration was found for this QR."
-            : "Vaccination or renewal is due.",
+            : nextPet.vaccination === "unknown" ? "Vaccination record is not available." : "Vaccination or renewal needs review.",
       });
     }
   };
@@ -123,7 +150,7 @@ export function ScannerScreen({ pets, onRecord, onFlagScan, onImpound }: Scanner
           scannerControls.stop();
           cameraControlsRef.current = null;
           setCameraActive(false);
-          finishScan(match);
+          void finishScan(match);
         },
       );
       if (scanCompletedRef.current) {
@@ -144,6 +171,7 @@ export function ScannerScreen({ pets, onRecord, onFlagScan, onImpound }: Scanner
   };
 
   const submitManual = () => {
+    if (submittingRef.current) return;
     const query = manualValue.trim().toLowerCase();
     const normalizedQuery = query.replace(/[\s-]/g, "");
     if (!query) {
@@ -164,9 +192,9 @@ export function ScannerScreen({ pets, onRecord, onFlagScan, onImpound }: Scanner
       return;
     }
     setManualError(null);
-    setManualOpen(false);
-    setManualValue("");
-    finishScan(match);
+    scanCompletedRef.current = true;
+    stopCamera();
+    void finishScan(match);
   };
 
   const reset = () => {
@@ -178,25 +206,55 @@ export function ScannerScreen({ pets, onRecord, onFlagScan, onImpound }: Scanner
     setPhase("idle");
   };
 
-  const handleFlag = () => {
-    if (!scanId || !pet) return;
-    onFlagScan(scanId);
-    setFlagged(true);
-    toast.info(`${pet.name} flagged for OCVAS review`, {
-      description: "The scan was logged for follow-up by the city vet office.",
-    });
+  const handleFlag = async () => {
+    if (!scanId || !pet || flaggingRef.current) return;
+    flaggingRef.current = true;
+    setFlagging(true);
+    try {
+      if (await onFlagScan(scanId, pet.id)) {
+        setFlagged(true);
+        toast.info(`${pet.name} flagged for OCVAS review`, {
+          description: "The scan was logged for follow-up by the city vet office.",
+        });
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to flag the scan.");
+    } finally {
+      flaggingRef.current = false;
+      setFlagging(false);
+    }
   };
 
-  const submitImpound = (event: FormEvent<HTMLFormElement>) => {
+  const submitImpound = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!pet) return;
-    onImpound(pet, impoundLocation.trim(), impoundDate, impoundReason.trim());
-    setImpoundOpen(false);
-    setImpoundLocation("");
-    setImpoundReason("");
-    toast.success("Impound report recorded.", {
-      description: `Notice preview prepared for ${pet.owner} and Barangay ${pet.barangay}. No message was sent.`,
-    });
+    if (!pet || impoundSubmittingRef.current) return;
+    const location = impoundLocation.trim();
+    const reason = impoundReason.trim();
+    const parsedDate = new Date(`${impoundDate}T00:00:00Z`);
+    if (!location || Array.from(location).length > 200 || !reason || Array.from(reason).length > 400) {
+      setImpoundError("Enter a location (up to 200 characters) and reason (up to 400 characters).");
+      return;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(impoundDate) || impoundDate < "0001-01-01" || Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== impoundDate || impoundDate > getPhilippineDateKey()) {
+      setImpoundError("Enter a valid impound date that is not in the future (Philippine time).");
+      return;
+    }
+    impoundSubmittingRef.current = true;
+    setImpoundSubmitting(true);
+    setImpoundError(null);
+    try {
+      if (await onImpound(pet, location, impoundDate, reason)) {
+        setImpoundOpen(false);
+        setImpoundLocation("");
+        setImpoundReason("");
+        toast.success("Impound report submitted.", { description: "Pending admin review. No automated SMS or email was sent." });
+      }
+    } catch (error) {
+      setImpoundError(error && typeof error === "object" && "message" in error && typeof error.message === "string" ? error.message : "Unable to submit the impound report. Try again.");
+    } finally {
+      impoundSubmittingRef.current = false;
+      setImpoundSubmitting(false);
+    }
   };
 
   return (
@@ -221,18 +279,23 @@ export function ScannerScreen({ pets, onRecord, onFlagScan, onImpound }: Scanner
 
       <div className="mt-4 px-5">
         {phase === "result" && pet ? (
-          <PetRecord
-            pet={pet}
-            mode="scan"
-            onBack={reset}
-            onFlag={handleFlag}
-            onLogImpound={() => {
-              setImpoundLocation(pet.barangay);
-              setImpoundOpen(true);
-            }}
-            onScanAnother={reset}
-            flagged={flagged}
-          />
+          <fieldset disabled={flagging}>
+            <PetRecord
+              pet={pet}
+              mode="scan"
+              onBack={reset}
+              onFlag={handleFlag}
+              onLogImpound={() => {
+                setImpoundLocation(pet.barangay);
+                setImpoundDate(getPhilippineDateKey());
+                setImpoundError(null);
+                setImpoundOpen(true);
+              }}
+              onScanAnother={reset}
+              flagged={flagged || reviewIds.includes(pet.id)}
+            />
+            {flagging ? <p role="status" className="mt-2 text-xs text-muted-foreground">Saving review flag...</p> : null}
+          </fieldset>
         ) : (
           <div className="space-y-3">
             <div className="relative mx-auto aspect-[4/5] w-full max-w-[248px] overflow-hidden rounded-2xl bg-foreground shadow-raised">
@@ -275,11 +338,11 @@ export function ScannerScreen({ pets, onRecord, onFlagScan, onImpound }: Scanner
 
             <Button
               onClick={cameraActive ? stopCamera : startCamera}
-              disabled={cameraStarting}
+              disabled={cameraStarting || recording}
               className="h-11 w-full rounded-xl text-[12px] font-bold shadow-glow"
             >
               {cameraActive ? <CameraOff className="size-4" /> : <ScanLine className="size-4" />}
-              {cameraStarting ? "Opening camera…" : cameraActive ? "Stop camera" : "Start camera"}
+              {recording ? "Recording scan..." : cameraStarting ? "Opening camera…" : cameraActive ? "Stop camera" : "Start camera"}
             </Button>
 
             {cameraError ? (
@@ -315,6 +378,7 @@ export function ScannerScreen({ pets, onRecord, onFlagScan, onImpound }: Scanner
                   />
                   <Button
                     onClick={submitManual}
+                    disabled={recording}
                     className="h-9 shrink-0 rounded-lg px-3 text-[11px] font-bold"
                   >
                     Find
@@ -339,16 +403,16 @@ export function ScannerScreen({ pets, onRecord, onFlagScan, onImpound }: Scanner
 
             <div className="flex items-center justify-center gap-1.5 pt-1 text-[9px] text-muted-foreground/80">
               <BadgeCheck className="size-3 text-primary" />
-              Every scan is recorded for accountability
+              Matched scans are recorded for accountability
             </div>
           </div>
         )}
       </div>
 
-      <Dialog open={impoundOpen} onOpenChange={setImpoundOpen}>
+      <Dialog open={impoundOpen} onOpenChange={(open) => { if (!impoundSubmittingRef.current) setImpoundOpen(open); }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto rounded-xl border-border bg-card sm:max-w-[440px]">
           <DialogHeader>
-            <DialogTitle>Log impound &amp; prepare notices</DialogTitle>
+            <DialogTitle>Report impound</DialogTitle>
             <DialogDescription>
               {pet ? `${pet.name} • Owner ${pet.owner} (${pet.contact}) • Barangay ${pet.barangay}` : "Record the impound details."}
             </DialogDescription>
@@ -357,22 +421,23 @@ export function ScannerScreen({ pets, onRecord, onFlagScan, onImpound }: Scanner
             <form onSubmit={submitImpound} className="space-y-3">
               <div className="space-y-1.5">
                 <Label htmlFor="impound-location">Location where found</Label>
-                <Input id="impound-location" value={impoundLocation} onChange={(event) => setImpoundLocation(event.target.value)} required placeholder="Barangay, street, landmark" />
+                <Input id="impound-location" value={impoundLocation} onChange={(event) => setImpoundLocation(event.target.value)} required maxLength={200} disabled={impoundSubmitting} placeholder="Barangay, street, landmark" />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="impound-date">Date impounded</Label>
-                <Input id="impound-date" type="date" value={impoundDate} onChange={(event) => setImpoundDate(event.target.value)} required />
+                <Input id="impound-date" type="date" value={impoundDate} onChange={(event) => setImpoundDate(event.target.value)} required min="0001-01-01" max={getPhilippineDateKey()} disabled={impoundSubmitting} />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="impound-reason">Reason / field notes</Label>
-                <Textarea id="impound-reason" value={impoundReason} onChange={(event) => setImpoundReason(event.target.value)} required maxLength={400} placeholder="Why was the animal brought to the pound?" />
+                <Textarea id="impound-reason" value={impoundReason} onChange={(event) => setImpoundReason(event.target.value)} required maxLength={400} disabled={impoundSubmitting} placeholder="Why was the animal brought to the pound?" />
               </div>
               <div className="rounded-lg border border-warning/25 bg-warning/10 p-2.5 text-[9.5px] leading-relaxed text-muted-foreground">
-                This preview prepares owner and barangay notice entries locally. SMS/email delivery is not enabled yet.
+                This report will be pending admin review. No automated SMS or email is sent.
               </div>
+              {impoundError ? <p role="alert" className="text-xs text-destructive">{impoundError}</p> : null}
               <div className="flex justify-end gap-2">
-                <Button type="button" variant="outline" onClick={() => setImpoundOpen(false)}>Cancel</Button>
-                <Button type="submit">Save report &amp; notice preview</Button>
+                <Button type="button" variant="outline" disabled={impoundSubmitting} onClick={() => setImpoundOpen(false)}>Cancel</Button>
+                <Button type="submit" disabled={impoundSubmitting}>{impoundSubmitting ? "Submitting..." : "Submit report"}</Button>
               </div>
             </form>
           ) : null}

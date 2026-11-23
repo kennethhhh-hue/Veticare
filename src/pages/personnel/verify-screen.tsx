@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ChevronRight, Search, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { PetPhoto } from "@/components/owner-app/pet-photo";
@@ -36,12 +36,39 @@ export function VerifyScreen({
   pets: PersonnelPet[];
   verifiedIds: string[];
   reviewIds: string[];
-  onVerify: (petId: string) => void;
-  onFlag: (petId: string) => void;
+  onVerify: (petId: string) => Promise<boolean>;
+  onFlag: (petId: string) => Promise<boolean>;
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<FilterKey>("all");
   const [selected, setSelected] = useState<PersonnelPet | null>(null);
+  const pendingRef = useRef(false);
+  const [pending, setPending] = useState(false);
+
+  const submit = async (pet: PersonnelPet, action: "verify" | "flag") => {
+    if (pendingRef.current) return;
+    pendingRef.current = true;
+    setPending(true);
+    try {
+      const success = await (action === "verify" ? onVerify(pet.id) : onFlag(pet.id));
+      if (success) {
+        if (action === "verify") {
+          toast.success(`Verification recorded for ${pet.name}`, {
+            description: `${pet.id} • verification recorded by personnel.`,
+          });
+        } else {
+          toast.info(`${pet.name} marked for OCVAS review`, {
+            description: "An admin will review this record.",
+          });
+        }
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to record personnel activity.");
+    } finally {
+      pendingRef.current = false;
+      setPending(false);
+    }
+  };
 
   if (selected) {
     const verified = verifiedIds.includes(selected.id);
@@ -56,25 +83,18 @@ export function VerifyScreen({
           </h1>
         </header>
         <div className="mt-4 px-5">
-          <PetRecord
-            pet={selected}
-            mode="verify"
-            onBack={() => setSelected(null)}
-            verified={verified}
-            flagged={reviewIds.includes(selected.id)}
-            onVerify={() => {
-              onVerify(selected.id);
-              toast.success(`${selected.name} verified for this year`, {
-                description: `${selected.id} • registration confirmed by personnel.`,
-              });
-            }}
-            onFlag={() => {
-              onFlag(selected.id);
-              toast.info(`${selected.name} marked for OCVAS review`, {
-                description: "An admin will review this record.",
-              });
-            }}
-          />
+          <fieldset disabled={pending}>
+            <PetRecord
+              pet={selected}
+              mode="verify"
+              onBack={() => setSelected(null)}
+              verified={verified}
+              flagged={reviewIds.includes(selected.id)}
+              onVerify={() => void submit(selected, "verify")}
+              onFlag={() => void submit(selected, "flag")}
+            />
+            {pending ? <p role="status" className="mt-2 text-xs text-muted-foreground">Saving activity...</p> : null}
+          </fieldset>
         </div>
       </div>
     );
