@@ -189,6 +189,7 @@ export function AppShell({
   const [notifications, setNotifications] = useState<HeaderNotification[]>([]);
   const [notificationError, setNotificationError] = useState<string | null>(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [selectedNotification, setSelectedNotification] = useState<HeaderNotification | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const unreadCount = notifications.filter((notification) => !notification.read_at).length;
@@ -367,7 +368,7 @@ export function AppShell({
                     {notifications.map(item => {
                     const Icon = item.notification_type.startsWith("adoption_") ? Heart : item.notification_type === "impound_logged" ? PawPrint : ShieldCheck;
                     return <li key={item.id}>
-                          <button type="button" onClick={() => void markNotificationRead(item)} className="flex w-full gap-3 px-4 py-3 text-left hover:bg-secondary/40">
+                          <button type="button" onClick={() => { setNotificationsOpen(false); setSelectedNotification(item); if (!item.read_at) void markNotificationRead(item); }} className="flex w-full gap-3 px-4 py-3 text-left hover:bg-secondary/40">
                             <span className="relative mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-secondary">
                               <Icon className="size-4 text-foreground/70" />
                               {!item.read_at ? <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-primary ring-2 ring-card" /> : null}
@@ -433,6 +434,18 @@ export function AppShell({
           <div className="mx-auto w-full max-w-[1360px]">{children}</div>
         </main>
       </div>
+
+      <Dialog open={Boolean(selectedNotification)} onOpenChange={(open) => { if (!open) setSelectedNotification(null); }}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-xl border-border bg-card sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle className="break-words pr-6">{selectedNotification?.title}</DialogTitle>
+            <DialogDescription>
+              {selectedNotification ? new Date(selectedNotification.created_at).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short", timeZone: PHILIPPINE_TIME_ZONE }) : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">{selectedNotification?.message}</p>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={accountSettingsOpen} onOpenChange={setAccountSettingsOpen}>
         <DialogContent className="rounded-xl border-border bg-card sm:max-w-[460px]">

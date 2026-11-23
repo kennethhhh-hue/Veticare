@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  ArrowLeft,
   BadgeCheck,
   Bell,
   BellRing,
@@ -18,6 +19,8 @@ import {
 } from "@/data/personnel";
 import type { PersonnelImpoundNotice } from "@/lib/personnel-preview-store";
 import type { OwnerNotification } from "@/pages/owner-app/notifications-screen";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const resultTone: Record<ScanResult, string> = {
   verified: "bg-success/10 text-success",
@@ -46,6 +49,7 @@ interface HomeScreenProps {
 export function HomeScreen({ scans, impoundNotices, personnelName, notifications, onMarkNotificationRead, onOpenScan, onOpenHistory }: HomeScreenProps) {
   const stats = getShiftStats(scans);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [selectedNotification, setSelectedNotification] = useState<OwnerNotification | null>(null);
   const unreadNotifications = notifications.filter((notification) => !notification.read_at).length;
 
   const metrics = [
@@ -67,27 +71,53 @@ export function HomeScreen({ scans, impoundNotices, personnelName, notifications
             {personnelName || "OCVAS Personnel"}
           </p>
         </div>
-        <button type="button" onClick={() => setNotificationsOpen((open) => !open)} className="relative grid size-9 place-items-center rounded-xl border border-border bg-card text-foreground" aria-label={`${unreadNotifications} unread notifications`} aria-expanded={notificationsOpen}>
+        <button type="button" onClick={() => setNotificationsOpen(true)} className="relative grid size-9 place-items-center rounded-xl border border-border bg-card text-foreground" aria-label={`Notifications, ${unreadNotifications} unread`} aria-haspopup="dialog" aria-expanded={notificationsOpen}>
           <Bell className="size-4" />
           {unreadNotifications ? <span className="absolute -right-1 -top-1 grid min-h-4 min-w-4 place-items-center rounded-full bg-destructive px-1 text-[8px] font-bold text-destructive-foreground">{unreadNotifications > 9 ? "9+" : unreadNotifications}</span> : null}
         </button>
       </header>
 
-      {notificationsOpen ? (
-        <section className="mx-5 mt-3 overflow-hidden rounded-xl border border-border bg-card" aria-label="Notifications">
-          <div className="border-b border-border px-3 py-2"><p className="text-[11px] font-bold text-foreground">Notifications</p></div>
-          {notifications.length ? <ul className="divide-y divide-border">
-            {notifications.slice(0, 5).map((notification) => (
-              <li key={notification.id}>
-                <button type="button" onClick={() => void onMarkNotificationRead(notification)} className="flex w-full items-start gap-2 px-3 py-2.5 text-left hover:bg-secondary/50">
-                  <span className={`mt-1 size-2 shrink-0 rounded-full ${notification.read_at ? "bg-muted-foreground/30" : "bg-primary"}`} />
-                  <span className="min-w-0"><span className="block text-[10px] font-bold text-foreground">{notification.title}</span><span className="mt-0.5 block text-[9px] leading-relaxed text-muted-foreground">{notification.message}</span><time className="mt-1 block text-[8px] text-muted-foreground/80">{new Date(notification.created_at).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Manila" })}</time></span>
-                </button>
-              </li>
-            ))}
-          </ul> : <p className="px-3 py-5 text-center text-[10px] text-muted-foreground">No notifications yet.</p>}
-        </section>
-      ) : null}
+      <Dialog open={notificationsOpen} onOpenChange={(open) => {
+        setNotificationsOpen(open);
+        if (!open) setSelectedNotification(null);
+      }}>
+        <DialogContent className="max-h-[min(85dvh,600px)] w-[calc(100%-2rem)] overflow-y-auto rounded-xl border-border bg-card p-5 sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle className="break-words pr-6">{selectedNotification ? selectedNotification.title : "Notifications"}</DialogTitle>
+            <DialogDescription>
+              {selectedNotification
+                ? new Date(selectedNotification.created_at).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Manila" })
+                : unreadNotifications ? `${unreadNotifications} unread` : "You are all caught up."}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedNotification ? (
+            <div className="space-y-4">
+              <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">{selectedNotification.message}</p>
+              <Button type="button" variant="outline" onClick={() => setSelectedNotification(null)}>
+                <ArrowLeft className="size-4" />Back to notifications
+              </Button>
+            </div>
+          ) : notifications.length ? (
+            <ul className="divide-y divide-border border-y border-border">
+              {notifications.map((notification) => (
+                <li key={notification.id}>
+                  <button type="button" onClick={() => { setSelectedNotification(notification); if (!notification.read_at) onMarkNotificationRead(notification); }} className="flex w-full items-start gap-3 px-1 py-3 text-left hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary">
+                    <span className={`mt-1.5 size-2 shrink-0 rounded-full ${notification.read_at ? "bg-muted-foreground/30" : "bg-primary"}`} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block break-words text-[12px] font-bold text-foreground">{notification.title}</span>
+                      <span className="mt-1 block break-words text-[11px] leading-relaxed text-muted-foreground">{notification.message}</span>
+                      <time dateTime={notification.created_at} className="mt-1 block text-[10px] text-muted-foreground/80">{new Date(notification.created_at).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Manila" })}</time>
+                    </span>
+                    <ChevronRight className="mt-1 size-4 shrink-0 text-muted-foreground" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="py-6 text-center text-sm text-muted-foreground">No notifications yet.</p>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <section className="mt-4 px-5">
         <div className="relative overflow-hidden rounded-2xl brand-gradient p-4 text-primary-foreground shadow-glow">

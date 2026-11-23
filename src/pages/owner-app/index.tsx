@@ -316,7 +316,19 @@ const OwnerApp = () => {
                     />
                   ) : null}
                   {tab === "notifications" ? (
-                    <NotificationsScreen notifications={notifications} onMarkRead={markNotificationRead} />
+                    <NotificationsScreen
+                      notifications={notifications}
+                      onMarkRead={markNotificationRead}
+                      onOpenPet={(petId) => {
+                        const pet = pets.find((item) => item.id === petId);
+                        if (!pet) {
+                          toast.error(petsLoading ? "Pet records are still loading." : "This pet record is not available.");
+                          return false;
+                        }
+                        setOpenPet(pet);
+                        return true;
+                      }}
+                    />
                   ) : null}
                   {tab === "profile" ? (
                     <ProfileScreen

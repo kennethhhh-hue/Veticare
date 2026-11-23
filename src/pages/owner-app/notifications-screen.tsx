@@ -1,4 +1,7 @@
-import { Bell, Check, CheckCheck } from "lucide-react";
+import { useState } from "react";
+import { Bell, Check, CheckCheck, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { Database } from "@/integrations/supabase/types";
 
 export type OwnerNotification = Database["public"]["Tables"]["notifications"]["Row"];
@@ -6,9 +9,11 @@ export type OwnerNotification = Database["public"]["Tables"]["notifications"]["R
 interface NotificationsScreenProps {
   notifications: OwnerNotification[];
   onMarkRead: (notification: OwnerNotification) => void;
+  onOpenPet: (petId: string) => boolean;
 }
 
-export function NotificationsScreen({ notifications, onMarkRead }: NotificationsScreenProps) {
+export function NotificationsScreen({ notifications, onMarkRead, onOpenPet }: NotificationsScreenProps) {
+  const [selected, setSelected] = useState<OwnerNotification | null>(null);
   const unreadCount = notifications.filter((notification) => !notification.read_at).length;
 
   return (
@@ -28,7 +33,15 @@ export function NotificationsScreen({ notifications, onMarkRead }: Notifications
 
       <ul className="mt-4 divide-y divide-border border-y border-border">
         {notifications.length ? notifications.map((notification) => (
-          <li key={notification.id} className="flex items-start gap-3 px-5 py-4">
+          <li key={notification.id}>
+            <button
+              type="button"
+              onClick={() => {
+                setSelected(notification);
+                if (!notification.read_at) onMarkRead(notification);
+              }}
+              className="flex w-full items-start gap-3 px-5 py-4 text-left hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+            >
             <span className={`mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg ${notification.read_at ? "bg-secondary text-muted-foreground" : "bg-success/10 text-success"}`}>
               {notification.read_at ? <CheckCheck className="size-4" /> : <Check className="size-4" />}
             </span>
@@ -39,15 +52,8 @@ export function NotificationsScreen({ notifications, onMarkRead }: Notifications
                 {new Date(notification.created_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
               </time>
             </div>
-            {!notification.read_at ? (
-              <button
-                type="button"
-                onClick={() => onMarkRead(notification)}
-                className="shrink-0 rounded-md px-2 py-1 text-[9px] font-semibold text-primary hover:bg-primary-soft"
-              >
-                Mark read
-              </button>
-            ) : null}
+            <ChevronRight className="mt-1 size-4 shrink-0 text-muted-foreground" />
+            </button>
           </li>
         )) : (
           <li className="px-5 py-12 text-center">
@@ -57,6 +63,22 @@ export function NotificationsScreen({ notifications, onMarkRead }: Notifications
           </li>
         )}
       </ul>
+      <Dialog open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelected(null); }}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-xl border-border bg-card sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle className="break-words pr-6">{selected?.title}</DialogTitle>
+            <DialogDescription>
+              {selected ? new Date(selected.created_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">{selected?.message}</p>
+          {selected?.pet_record_id ? (
+            <Button type="button" onClick={() => {
+              if (onOpenPet(selected.pet_record_id!)) setSelected(null);
+            }}>View pet record</Button>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

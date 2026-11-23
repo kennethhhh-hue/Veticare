@@ -4,7 +4,8 @@ import {
   type ReactNode,
 } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Navigate, useLocation } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 import { supabase } from "./client";
 import { AuthContext, useAuth, type ApprovalStatus, type UserRole } from "./auth-context";
 
@@ -13,44 +14,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<UserRole | null>(null);
   const [approvalStatus, setApprovalStatus] = useState<ApprovalStatus | null>(null);
   const [isActive, setIsActive] = useState<boolean | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [sessionReady, setSessionReady] = useState(false);
+  const [loadedProfileId, setLoadedProfileId] = useState<string | null>(null);
 
   useEffect(() => {
-    let active = true;
-
-    supabase.auth.getSession().then(({ data, error }) => {
-      if (!active) return;
-      if (error) console.error("Unable to load Supabase session:", error.message);
-      setSession(data.session);
-      setLoading(false);
-    });
-
     const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
-      setLoading(false);
+      setSessionReady(true);
     });
 
     return () => {
-      active = false;
       data.subscription.unsubscribe();
     };
   }, []);
 
+  const userId = session?.user.id;
+
   useEffect(() => {
-    if (!session) {
+    if (!userId) {
       setRole(null);
       setApprovalStatus(null);
       setIsActive(null);
-      setLoading(false);
+      setLoadedProfileId(null);
       return;
     }
 
     let active = true;
-    setLoading(true);
+    setLoadedProfileId(null);
     supabase
       .from("profiles")
       .select("role, approval_status, is_active")
-      .eq("id", session.user.id)
+      .eq("id", userId)
       .maybeSingle()
       .then(async (result) => {
         if (!active) return;
@@ -59,22 +53,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const fallback = await supabase
             .from("profiles")
             .select("role, approval_status")
-            .eq("id", session.user.id)
+            .eq("id", userId)
             .maybeSingle();
           data = fallback.data ? { ...fallback.data, is_active: true } : null;
           error = fallback.error;
         }
+        if (!active) return;
         if (error) console.error("Unable to load account role:", error.message);
         setRole(data?.role ?? null);
         setApprovalStatus(data?.approval_status ?? null);
         setIsActive(data?.is_active ?? true);
-        setLoading(false);
+        setLoadedProfileId(userId);
       });
 
     return () => {
       active = false;
     };
-  }, [session]);
+  }, [userId]);
+
+  const loading = !sessionReady || (session !== null && loadedProfileId !== session.user.id);
 
   return (
     <AuthContext.Provider value={{ session, role, approvalStatus, isActive, loading }}>
@@ -92,6 +89,21 @@ export function RequireAuth({
 }) {
   const { session, role, approvalStatus, isActive, loading } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState<string | null>(null);
+
+  const backToLogin = async () => {
+    setSigningOut(true);
+    setSignOutError(null);
+    const { error } = await supabase.auth.signOut({ scope: "local" });
+    if (error) {
+      setSignOutError(error.message);
+      setSigningOut(false);
+      return;
+    }
+    navigate("/login", { replace: true });
+  };
 
   if (loading) {
     return (
@@ -138,6 +150,10 @@ export function RequireAuth({
               ? "Your owner details need correction. Contact the City Veterinary Office for help."
               : "The City Veterinary Office is reviewing your owner details. You can use the pet-owner app after your account is approved."}
           </p>
+          {signOutError ? <p className="mt-3 text-sm text-destructive" role="alert">{signOutError}</p> : null}
+          <Button type="button" className="mt-5 w-full" onClick={() => void backToLogin()} disabled={signingOut}>
+            {signingOut ? "Signing out..." : "Back to login"}
+          </Button>
         </div>
       </div>
     );
