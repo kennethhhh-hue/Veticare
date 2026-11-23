@@ -24,6 +24,7 @@ import {
   type OwnerProfile,
   type OwnerRequest,
 } from "@/lib/owner-preview-store";
+import { PullToRefresh } from "@/components/veticare/pull-to-refresh";
 
 const tabs = [
   { key: "home", label: "Home", icon: Home },
@@ -256,7 +257,7 @@ const OwnerApp = () => {
       <div className="relative h-full min-h-0 w-full sm:h-auto sm:max-w-[420px]">
         <div className="relative h-full min-h-0 overflow-hidden bg-background sm:h-[calc(100dvh-88px)] sm:max-h-[840px] sm:rounded-[2.6rem] sm:border-[10px] sm:border-foreground/85 sm:shadow-raised">
           <div className="flex h-full min-h-0 flex-col">
-            <div className="page-wash scroll-slim min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            <PullToRefresh disabled={registeringPet}>
               {registeringPet ? (
                 <PetRegistrationScreen
                   onBack={() => setRegisteringPet(false)}
@@ -360,7 +361,7 @@ const OwnerApp = () => {
                   ) : null}
                 </>
               )}
-            </div>
+            </PullToRefresh>
 
             {showTabs ? (
               <nav className="shrink-0 border-t border-border bg-card/95 px-2 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-xl">
@@ -381,7 +382,7 @@ const OwnerApp = () => {
                       >
                         <span
                           className={cn(
-                            "grid h-7 w-9 place-items-center rounded-lg transition-colors",
+                            "relative grid h-7 w-9 place-items-center rounded-lg transition-colors",
                             active ? "bg-primary-soft" : "bg-transparent",
                           )}
                         >

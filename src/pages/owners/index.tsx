@@ -69,6 +69,7 @@ const initials = (name: string) =>
     .join("");
 
 const Owners = () => {
+  const navigate = useNavigate();
   const [ownerRows, setOwnerRows] = useState<OwnerRecord[]>([]);
   const [petsByOwner, setPetsByOwner] = useState<Map<string, OwnerPetProfile[]>>(new Map());
   const [loading, setLoading] = useState(true);
@@ -82,6 +83,7 @@ const Owners = () => {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<OwnerRecord | null>(null);
   const [editing, setEditing] = useState(false);
+  const [updatingOwnerId, setUpdatingOwnerId] = useState<string | null>(null);
   const [draft, setDraft] = useState({ name: "", phone: "", address: "", barangay: "", status: "pending" as "pending" | "approved" | "rejected" });
 
   const loadOwners = useCallback(async () => {
@@ -161,12 +163,22 @@ const Owners = () => {
   };
 
   const updateOwnerStatus = async (owner: OwnerRecord, next: "approved" | "rejected") => {
-    const { error } = await supabase.from("profiles")
+    if (updatingOwnerId) return;
+    setUpdatingOwnerId(owner.id);
+    const { data, error } = await supabase.from("profiles")
       .update({ approval_status: next })
       .eq("id", owner.id)
-      .eq("role", "owner");
+      .eq("role", "owner")
+      .eq("approval_status", "pending")
+      .select("id")
+      .maybeSingle();
+    setUpdatingOwnerId(null);
     if (error) {
       toast.error(error.message);
+      return;
+    }
+    if (!data) {
+      toast.error("Owner could not be updated. Refresh the list and check the approval status.");
       return;
     }
     const statusValue = next === "approved" ? "active" : "rejected";
@@ -482,6 +494,7 @@ const Owners = () => {
                         <TooltipTrigger asChild>
                           <Button
                             size="icon"
+                            disabled={Boolean(updatingOwnerId)}
                             onClick={() => updateOwnerStatus(owner, "approved")}
                             className="size-7 rounded-lg bg-success text-success-foreground"
                             aria-label={`Approve ${owner.name}`}
@@ -496,6 +509,7 @@ const Owners = () => {
                           <Button
                             size="icon"
                             variant="outline"
+                            disabled={Boolean(updatingOwnerId)}
                             onClick={() => updateOwnerStatus(owner, "rejected")}
                             className="size-7 rounded-lg border-border text-destructive"
                             aria-label={`Reject ${owner.name}`}
@@ -507,20 +521,23 @@ const Owners = () => {
                       </Tooltip>
                     </>
                   ) : null}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        size="icon"
-                        variant="outline"
-                        onClick={() => navigate("/registrations")}
-                        className="size-7 rounded-lg border-border text-muted-foreground hover:border-primary/30 hover:text-primary"
-                        aria-label={`Add a pet for ${owner.name}`}
-                      >
-                        <Plus className="size-3.5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Register a pet</TooltipContent>
-                  </Tooltip>
+                  {owner.status === "active" ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="outline"
+                          onClick={() => navigate("/registrations")}
+                          className="size-7 rounded-lg border-border text-muted-foreground hover:border-primary/30 hover:text-primary"
+                          aria-label={`Register a pet for ${owner.name}`}
+                        >
+                          <Plus className="size-3.5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Register a pet</TooltipContent>
+                    </Tooltip>
+                  ) : null}
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
@@ -572,7 +589,7 @@ const Owners = () => {
           }
         }}
       >
-        <DialogContent className="max-h-[88vh] w-[calc(100%-2rem)] max-w-[480px] overflow-y-auto rounded-2xl border-border p-5 sm:rounded-2xl">
+        <DialogContent className="max-h-[min(88dvh,720px)] w-[calc(100%-2rem)] max-w-[480px] grid-cols-[minmax(0,1fr)] overflow-x-hidden overflow-y-auto rounded-2xl border-border p-4 sm:rounded-2xl sm:p-5">
           {selected ? (
             <>
               <DialogHeader className="pr-6 text-left">
@@ -580,11 +597,11 @@ const Owners = () => {
                   <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary-soft text-[12px] font-bold text-primary">
                     {initials(selected.name)}
                   </span>
-                  <div className="min-w-0">
-                    <DialogTitle className="truncate text-[16px] font-extrabold tracking-[-0.02em]">
+                  <div className="min-w-0 flex-1">
+                    <DialogTitle className="break-words text-[16px] font-extrabold tracking-[-0.02em]">
                       {selected.name}
                     </DialogTitle>
-                    <DialogDescription className="num truncate text-[11px]">
+                    <DialogDescription className="num break-all text-[11px]">
                       {selected.id} • Member since {selected.registered}
                     </DialogDescription>
                   </div>
@@ -592,7 +609,7 @@ const Owners = () => {
               </DialogHeader>
 
               <div className="space-y-3">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <StatusPill status={selected.status} />
                   <span className="rounded-full bg-secondary px-2 py-1 text-[10px] font-semibold text-secondary-foreground">
                     {selected.pets} {selected.pets === 1 ? "registered pet" : "registered pets"}
@@ -685,13 +702,16 @@ const Owners = () => {
                 )}
 
                 <div className="flex flex-col gap-2">
-                  <Button
-                    onClick={() => navigate("/registrations")}
-                    className="h-10 w-full rounded-xl text-[12px] font-bold shadow-glow"
-                  >
-                    <Plus className="size-4" />
-                    Register a pet for {selected.name.split(" ")[0]}
-                  </Button>
+                  {!editing && selected.status === "pending" ? (
+                    <Button type="button" disabled={Boolean(updatingOwnerId)} onClick={() => void updateOwnerStatus(selected, "approved")} className="h-10 w-full rounded-xl text-[12px] font-bold shadow-glow">
+                      <Check className="size-4" />{updatingOwnerId === selected.id ? "Approving..." : "Approve owner"}
+                    </Button>
+                  ) : null}
+                  {!editing ? (
+                    <Button type="button" onClick={() => navigate("/registrations")} className="h-10 w-full rounded-xl text-[12px] font-bold shadow-glow">
+                      <Plus className="size-4" />Register a pet for {selected.name.split(" ")[0]}
+                    </Button>
+                  ) : null}
                   <Button
                     variant="outline"
                     onClick={() => setSelected(null)}

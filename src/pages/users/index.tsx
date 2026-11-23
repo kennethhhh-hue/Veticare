@@ -114,8 +114,17 @@ const UsersRoles = () => {
     setLoadError(null);
     const { data, error } = await supabase.functions.invoke("admin-users", { body: { action: "list" } });
     if (error) {
-      setLoadError(error.message);
-      toast.error("Unable to load users", { description: error.message });
+      const message = error.message.includes("not found")
+        ? "The admin-users backend is not deployed. Deploy the Edge Function and apply the user-management migration."
+        : error.message;
+      setLoadError(message);
+      toast.error("Unable to load users", { description: message });
+      setLoading(false);
+      return;
+    }
+    if (data?.error) {
+      setLoadError(String(data.error));
+      toast.error("Unable to load users", { description: String(data.error) });
       setLoading(false);
       return;
     }
@@ -180,17 +189,12 @@ const UsersRoles = () => {
     }
     const normalizedEmail = inviteEmail.trim().toLowerCase();
     setBusy(true);
-    const { error } = await supabase.functions.invoke("admin-users", {
-      body: {
-        action: "invite",
-        email: normalizedEmail,
-        fullName: inviteName.trim(),
-        role: roleToDatabase[inviteRole],
-      },
+    const { data, error } = await supabase.functions.invoke("admin-users", {
+      body: { action: "invite", email: normalizedEmail, fullName: inviteName.trim(), role: roleToDatabase[inviteRole] },
     });
     setBusy(false);
-    if (error) {
-      setInviteError(error.message);
+    if (error || data?.error) {
+      setInviteError(error?.message || String(data?.error));
       return;
     }
     setInviteError(null);
@@ -211,17 +215,12 @@ const UsersRoles = () => {
   const saveMember = async () => {
     if (!editing) return;
     setBusy(true);
-    const { error } = await supabase.functions.invoke("admin-users", {
-      body: {
-        action: "update",
-        userId: editing.id,
-        role: roleToDatabase[editRole],
-        isActive: editStatus !== "inactive",
-      },
+    const { data, error } = await supabase.functions.invoke("admin-users", {
+      body: { action: "update", userId: editing.id, role: roleToDatabase[editRole], isActive: editStatus !== "inactive" },
     });
     setBusy(false);
-    if (error) {
-      toast.error("Unable to update user", { description: error.message });
+    if (error || data?.error) {
+      toast.error("Unable to update user", { description: error?.message || String(data?.error) });
       return;
     }
     toast.success(`${editing.name} updated`);
@@ -232,12 +231,12 @@ const UsersRoles = () => {
   const removeMember = async () => {
     if (!removing) return;
     setBusy(true);
-    const { error } = await supabase.functions.invoke("admin-users", {
+    const { data, error } = await supabase.functions.invoke("admin-users", {
       body: { action: "remove", userId: removing.id },
     });
     setBusy(false);
-    if (error) {
-      toast.error("Unable to remove user", { description: error.message });
+    if (error || data?.error) {
+      toast.error("Unable to remove user", { description: error?.message || String(data?.error) });
       return;
     }
     toast.success(`${removing.name} access revoked`, { description: "Their account and records were preserved." });

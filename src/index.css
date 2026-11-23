@@ -178,7 +178,7 @@
   .mobile-app-viewport {
     box-sizing: border-box;
     height: 100vh;
-    height: 100svh;
+    height: 100dvh;
     min-height: 0;
     overflow: hidden;
     padding-top: env(safe-area-inset-top, 0px);

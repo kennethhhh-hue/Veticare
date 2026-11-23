@@ -3,7 +3,6 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { BadgeCheck, History, House, ScanLine, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { signOut } from "@/integrations/supabase/auth-context";
 import { HomeScreen } from "@/pages/personnel/home-screen";
 import { ScannerScreen } from "@/pages/personnel/scanner-screen";
 import { VerifyScreen } from "@/pages/personnel/verify-screen";
@@ -18,6 +17,7 @@ import {
   type ScanEntry,
   type ScanResult,
 } from "@/data/personnel";
+import { PullToRefresh } from "@/components/veticare/pull-to-refresh";
 
 export type PersonnelImpoundReport = Tables<"personnel_impound_reports"> & {
   pets: { id: string; name: string; pet_id: string | null } | null;
@@ -382,7 +382,7 @@ const PersonnelApp = () => {
       <div className="relative h-full min-h-0 w-full sm:h-auto sm:max-w-[420px]">
         <div className="relative h-full min-h-0 overflow-hidden bg-background sm:h-[calc(100dvh-88px)] sm:max-h-[840px] sm:rounded-[2.6rem] sm:border-[10px] sm:border-foreground/85 sm:shadow-raised">
           <div className="flex h-full min-h-0 flex-col">
-            <div className="page-wash scroll-slim min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            <PullToRefresh disabled={tab === "scan"}>
               {activityError ? <p role="alert" className="mx-5 mt-3 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">{activityError}</p> : null}
               {tab === "home" ? (
                 <HomeScreen
@@ -437,76 +437,29 @@ const PersonnelApp = () => {
                   onPhotoUpdated={(avatarUrl) => setPersonnelIdentity((current) => ({ ...current, avatarUrl }))}
                 />
               ) : null}
-            </div>
-
+            </PullToRefresh>
             <nav className="relative shrink-0 border-t border-border bg-card/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl">
               <div className="flex items-end justify-around gap-1">
                 {leftTabs.map((item) => {
                   const Icon = item.icon;
                   const active = tab === item.key;
                   return (
-                    <button
-                      key={item.key}
-                      type="button"
-                      onClick={() => setTab(item.key)}
-                      aria-current={active ? "page" : undefined}
-                      className={cn(
-                        "flex flex-1 flex-col items-center gap-1 rounded-xl py-1 transition-colors",
-                        active ? "text-primary" : "text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "grid h-7 w-9 place-items-center rounded-lg transition-colors",
-                          active ? "bg-primary-soft" : "bg-transparent",
-                        )}
-                      >
-                        <Icon className="size-[18px]" strokeWidth={active ? 2.3 : 1.9} />
-                      </span>
+                    <button key={item.key} type="button" onClick={() => setTab(item.key)} aria-current={active ? "page" : undefined} className={cn("flex flex-1 flex-col items-center gap-1 rounded-xl py-1 transition-colors", active ? "text-primary" : "text-muted-foreground hover:text-foreground")}>
+                      <span className={cn("grid h-7 w-9 place-items-center rounded-lg transition-colors", active ? "bg-primary-soft" : "bg-transparent")}><Icon className="size-[18px]" strokeWidth={active ? 2.3 : 1.9} /></span>
                       <span className="text-[9px] font-semibold tracking-wide">{item.label}</span>
                     </button>
                   );
                 })}
-
-                <button
-                  type="button"
-                  onClick={() => setTab("scan")}
-                  aria-current={tab === "scan" ? "page" : undefined}
-                  className="flex w-[68px] shrink-0 flex-col items-center gap-1"
-                >
-                  <span
-                    className={cn(
-                      "grid size-12 -translate-y-3 place-items-center rounded-2xl brand-gradient text-primary-foreground shadow-glow ring-4 ring-card transition-transform",
-                      tab === "scan" && "scale-105",
-                    )}
-                  >
-                    <ScanLine className="size-5" strokeWidth={2.2} />
-                  </span>
-                  <span className="-mt-1.5 text-[9px] font-bold text-primary">Scan</span>
+                <button type="button" onClick={() => setTab("scan")} aria-current={tab === "scan" ? "page" : undefined} className="flex flex-1 flex-col items-center gap-1 py-1 text-primary">
+                  <span className="grid size-10 place-items-center rounded-xl bg-primary text-primary-foreground"><ScanLine className="size-5" /></span>
+                  <span className="text-[9px] font-semibold tracking-wide">Scan</span>
                 </button>
-
                 {rightTabs.map((item) => {
                   const Icon = item.icon;
                   const active = tab === item.key;
                   return (
-                    <button
-                      key={item.key}
-                      type="button"
-                      onClick={() => setTab(item.key)}
-                      aria-current={active ? "page" : undefined}
-                      className={cn(
-                        "flex flex-1 flex-col items-center gap-1 rounded-xl py-1 transition-colors",
-                        active ? "text-primary" : "text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "grid h-7 w-9 place-items-center rounded-lg transition-colors",
-                          active ? "bg-primary-soft" : "bg-transparent",
-                        )}
-                      >
-                        <Icon className="size-[18px]" strokeWidth={active ? 2.3 : 1.9} />
-                      </span>
+                    <button key={item.key} type="button" onClick={() => setTab(item.key)} aria-current={active ? "page" : undefined} className={cn("flex flex-1 flex-col items-center gap-1 rounded-xl py-1 transition-colors", active ? "text-primary" : "text-muted-foreground hover:text-foreground")}>
+                      <span className={cn("grid h-7 w-9 place-items-center rounded-lg transition-colors", active ? "bg-primary-soft" : "bg-transparent")}><Icon className="size-[18px]" strokeWidth={active ? 2.3 : 1.9} /></span>
                       <span className="text-[9px] font-semibold tracking-wide">{item.label}</span>
                     </button>
                   );
@@ -515,24 +468,10 @@ const PersonnelApp = () => {
             </nav>
           </div>
         </div>
-
         <p className="mt-3 hidden items-center justify-center gap-2 text-center text-[10.5px] text-muted-foreground sm:flex">
-          Veticare City Pound Personnel
+          Veticare personnel app
           <span className="text-muted-foreground/40">|</span>
-          <button
-            type="button"
-            onClick={async () => {
-              const { error } = await signOut();
-              if (error) {
-                toast.error(error.message);
-                return;
-              }
-              navigate("/login", { replace: true });
-            }}
-            className="font-semibold text-primary hover:underline"
-          >
-            Sign out
-          </button>
+          <button type="button" onClick={() => navigate("/")} className="font-semibold text-primary hover:underline">Staff dashboard</button>
         </p>
       </div>
     </div>
