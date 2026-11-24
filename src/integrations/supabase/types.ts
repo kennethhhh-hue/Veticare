@@ -3467,6 +3467,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          account_deleted_at: string | null
           address: string
           approval_status: "approved" | "pending" | "rejected"
           barangay: string
@@ -3479,6 +3480,7 @@ export type Database = {
           role: "admin" | "owner" | "personnel"
         }
         Insert: {
+          account_deleted_at?: string | null
           address?: string
           approval_status?: "approved" | "pending" | "rejected"
           barangay?: string
@@ -3491,6 +3493,7 @@ export type Database = {
           role?: "admin" | "owner" | "personnel"
         }
         Update: {
+          account_deleted_at?: string | null
           address?: string
           approval_status?: "approved" | "pending" | "rejected"
           barangay?: string

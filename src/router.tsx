@@ -1,5 +1,6 @@
 import Dashboard from "./pages/dashboard";
 import Login from "./pages/login";
+import { OwnerPasswordReset, ownerPasswordResetPath } from "./pages/login/owner-password-reset";
 import OwnerApp from "./pages/owner-app";
 import Registrations from "./pages/registrations";
 import Owners from "./pages/owners";
@@ -34,6 +35,11 @@ export const routers = [
     path: "/login/owner",
     name: "login-owner",
     element: <Login />,
+  },
+  {
+    path: ownerPasswordResetPath,
+    name: "owner-password-reset",
+    element: <OwnerPasswordReset />,
   },
   {
     path: "/login/personnel",

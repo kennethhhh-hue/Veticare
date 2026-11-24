@@ -56,9 +56,8 @@ const Registrations = () => {
   const [query, setQuery] = useState("");
   const [species, setSpecies] = useState("all");
   const [status, setStatus] = useState("all");
-  const [microchip, setMicrochip] = useState("all");
+  const [rfidFilter, setRfidFilter] = useState("all");
   const [draftsOnly, setDraftsOnly] = useState(false);
-  const [missingChipOnly, setMissingChipOnly] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
   const [issueTarget, setIssueTarget] = useState<PetRegistration | null>(null);
@@ -79,7 +78,7 @@ const Registrations = () => {
     setLoadError(null);
     const [{ data: petRows, error: petsError }, { data: profiles, error: profilesError }] = await Promise.all([
       supabase.from("pets").select("*").order("created_at", { ascending: false }),
-      supabase.from("profiles").select("id, email, full_name, phone, barangay").eq("role", "owner").order("full_name"),
+      supabase.from("profiles").select("id, email, full_name, phone, barangay, account_deleted_at").eq("role", "owner").order("full_name"),
     ]);
     if (petsError || profilesError) {
       const message = petsError?.message ?? profilesError?.message ?? "Unable to load registrations.";
@@ -89,7 +88,7 @@ const Registrations = () => {
       return;
     }
     const ownerById = new Map((profiles ?? []).map((profile) => [profile.id, profile]));
-    setOwnerOptions((profiles ?? []).map((profile) => ({
+    setOwnerOptions((profiles ?? []).filter((profile) => !profile.account_deleted_at).map((profile) => ({
       id: profile.id,
       email: profile.email,
       name: profile.full_name || profile.email || "Pet owner",
@@ -112,7 +111,6 @@ const Registrations = () => {
         photoUrl: pet.photo_url,
         owner: owner?.full_name || owner?.email || "Pet owner",
         phone: owner?.phone || "—",
-        microchip: null,
         petId: pet.pet_id,
         rfidTag: pet.rfid_tag,
         qrCode: pet.qr_code,
@@ -144,21 +142,18 @@ const Registrations = () => {
         `${row.name} ${row.breed} ${row.owner} ${row.id}`.toLowerCase().includes(search);
       const matchesSpecies = species === "all" || row.species === species;
       const matchesStatus = status === "all" || row.status === status;
-      const matchesChip =
-        microchip === "all" ||
-        (microchip === "linked" ? Boolean(row.microchip || row.rfidTag) : !row.microchip && !row.rfidTag);
+      const matchesRfid =
+        rfidFilter === "all" || (rfidFilter === "assigned" ? Boolean(row.rfidTag) : !row.rfidTag);
       const matchesDraft = !draftsOnly || Boolean(row.isDraft);
-      const matchesMissing = !missingChipOnly || !row.microchip;
       return (
         matchesQuery &&
         matchesSpecies &&
         matchesStatus &&
-        matchesChip &&
-        matchesDraft &&
-        matchesMissing
+        matchesRfid &&
+        matchesDraft
       );
     });
-  }, [rows, query, species, status, microchip, draftsOnly, missingChipOnly]);
+  }, [rows, query, species, status, rfidFilter, draftsOnly]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
@@ -174,9 +169,8 @@ const Registrations = () => {
     setQuery("");
     setSpecies("all");
     setStatus("all");
-    setMicrochip("all");
+    setRfidFilter("all");
     setDraftsOnly(false);
-    setMissingChipOnly(false);
     setPage(1);
     void loadRegistry();
     void queryClient.invalidateQueries({ queryKey: sidebarCountKeys.registrations });
@@ -401,7 +395,7 @@ const Registrations = () => {
       <PageHeader
         eyebrow="Operations"
         title="Pet Registration"
-        description="Review owner submissions, link microchips and issue pet IDs from a single registry."
+        description="Review owner submissions, assign RFID tags, and issue QR codes."
         actions={
           <>
             <Button
@@ -471,13 +465,13 @@ const Registrations = () => {
             />
             <FilterSelect
               className="col-span-2 sm:col-auto"
-              label="Microchip"
-              value={microchip}
-              onChange={resetPage(setMicrochip)}
+              label="RFID"
+              value={rfidFilter}
+              onChange={resetPage(setRfidFilter)}
               options={[
                 { value: "all", label: "All" },
-                { value: "linked", label: "Linked" },
-                { value: "missing", label: "Missing" },
+                { value: "assigned", label: "Assigned" },
+                { value: "unassigned", label: "Not assigned" },
               ]}
             />
             <div className="col-span-2 flex items-center gap-1.5 sm:col-auto sm:ml-auto">
@@ -514,38 +508,14 @@ const Registrations = () => {
             <span className="mr-1 text-[9.5px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
               Quick filters
             </span>
-            {[
-              {
-                id: "missing",
-                label: "Missing microchip",
-                checked: missingChipOnly,
-                onChange: (value: boolean) => {
-                  setMissingChipOnly(value);
-                  setPage(1);
-                },
-              },
-              {
-                id: "drafts",
-                label: "Drafts only",
-                checked: draftsOnly,
-                onChange: (value: boolean) => {
-                  setDraftsOnly(value);
-                  setPage(1);
-                },
-              },
-            ].map((item) => (
-              <label
-                key={item.id}
-                className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[10.5px] font-semibold text-foreground/85"
-              >
-                <Checkbox
-                  checked={item.checked}
-                  onCheckedChange={(value) => item.onChange(value === true)}
-                  className="size-3.5 rounded-[4px] border-border data-[state=checked]:border-primary"
-                />
-                {item.label}
-              </label>
-            ))}
+            <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[10.5px] font-semibold text-foreground/85">
+              <Checkbox
+                checked={draftsOnly}
+                onCheckedChange={(value) => resetPage(setDraftsOnly)(value === true)}
+                className="size-3.5 rounded-[4px] border-border data-[state=checked]:border-primary"
+              />
+              Drafts only
+            </label>
             <span className="ml-auto text-[10px] text-muted-foreground">
               {filtered.length} of {rows.length} records
             </span>
@@ -553,7 +523,7 @@ const Registrations = () => {
         ) : null}
 
         <div className="hidden border-y border-border bg-secondary/40 px-5 py-2 xl:grid xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1.05fr)_minmax(0,1.05fr)_minmax(0,0.85fr)_104px_116px] xl:gap-4">
-          {["Pet", "Owner", "Microchip", "Registered", "Status", "Action"].map((label) => (
+          {["Pet", "Owner", "RFID / QR", "Registered", "Status", "Action"].map((label) => (
             <p
               key={label}
               className="text-[9px] font-bold uppercase tracking-[0.12em] text-muted-foreground"
@@ -655,12 +625,11 @@ const Registrations = () => {
 
                 <div className="order-3 col-span-1 min-w-0 xl:order-none">
                   <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-muted-foreground xl:hidden">
-                    Microchip / RFID
+                    RFID / QR
                   </p>
                   <p className="num truncate text-[10.5px] font-medium text-foreground/85">
-                    Microchip: {row.microchip ?? "Not linked"}
+                    RFID: {row.rfidTag ?? "Not issued"}
                   </p>
-                  <p className="num mt-0.5 truncate text-[9.5px] text-muted-foreground">RFID: {row.rfidTag ?? "Not issued"}</p>
                   <p className="num mt-0.5 truncate text-[9px] text-muted-foreground/75">Pet: {row.petId ?? row.id} • QR: {row.qrCode ?? "Not issued"}</p>
                 </div>
 

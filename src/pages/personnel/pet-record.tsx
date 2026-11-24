@@ -153,14 +153,6 @@ export function PetRecord({
           </div>
           <div className="min-w-0">
             <p className="text-[8.5px] font-bold uppercase tracking-[0.12em] text-muted-foreground/80">
-              Microchip
-            </p>
-            <p className="num mt-0.5 truncate text-[10px] font-semibold text-foreground">
-              {pet.microchip ?? "Not linked"}
-            </p>
-          </div>
-          <div className="min-w-0">
-            <p className="text-[8.5px] font-bold uppercase tracking-[0.12em] text-muted-foreground/80">
               Collar RFID
             </p>
             <p className="num mt-0.5 truncate text-[10px] font-semibold text-foreground">

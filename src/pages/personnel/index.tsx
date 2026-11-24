@@ -284,7 +284,6 @@ const PersonnelApp = () => {
             : "Not available",
           vaccination: "unknown",
           lastVaccine: "No vaccination record linked",
-          microchip: null,
           rfidTag: pet.rfid_tag,
           qrCode: pet.qr_code,
         };

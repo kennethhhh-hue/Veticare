@@ -28,7 +28,6 @@ export interface PersonnelPet {
   validThrough: string;
   vaccination: VaccinationState;
   lastVaccine: string;
-  microchip: string | null;
   rfidTag?: string | null;
   qrCode?: string | null;
   photoUrl?: string;

@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FunctionsFetchError, FunctionsHttpError } from "@supabase/supabase-js";
 import { useNavigate } from "react-router-dom";
 import {
   CalendarDays,
   Check,
+  KeyRound,
   Mail,
   MapPin,
+  MoreVertical,
   PawPrint,
   Pencil,
   Phone,
@@ -12,6 +15,7 @@ import {
   RefreshCw,
   Search,
   SlidersHorizontal,
+  Trash2,
   UserCheck,
   Users,
   X,
@@ -31,11 +35,27 @@ import { Label } from "@/components/ui/label";
 import { BarangaySelect } from "@/components/owner-app/barangay-select";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
   TooltipContent,
@@ -46,6 +66,7 @@ import { type OwnerRecord } from "@/data/admin-records";
 import { supabase } from "@/integrations/supabase/client";
 
 const PAGE_SIZE = 5;
+type OwnerAccountAction = "reset-owner-password" | "delete-owner-account";
 
 interface OwnerPetProfile {
   id: string;
@@ -82,11 +103,18 @@ const Owners = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<OwnerRecord | null>(null);
+  const [accountAction, setAccountAction] = useState<{ type: OwnerAccountAction; owner: OwnerRecord } | null>(null);
+  const [accountActionBusy, setAccountActionBusy] = useState(false);
+  const [accountActionError, setAccountActionError] = useState<string | null>(null);
+  const accountActionLock = useRef(false);
+  const accountMenuRef = useRef<HTMLButtonElement>(null);
+  const ownerLoadVersion = useRef(0);
   const [editing, setEditing] = useState(false);
   const [updatingOwnerId, setUpdatingOwnerId] = useState<string | null>(null);
   const [draft, setDraft] = useState({ name: "", phone: "", address: "", barangay: "", status: "pending" as "pending" | "approved" | "rejected" });
 
   const loadOwners = useCallback(async () => {
+    const version = ++ownerLoadVersion.current;
     setLoading(true);
     setLoadError(null);
     const [{ data: profiles, error: profilesError }, { data: petRows, error: petsError }] = await Promise.all([
@@ -94,9 +122,11 @@ const Owners = () => {
         .from("profiles")
         .select("id, email, full_name, phone, address, barangay, approval_status, created_at")
         .eq("role", "owner")
+        .is("account_deleted_at", null)
         .order("created_at", { ascending: false }),
       supabase.from("pets").select("id, owner_id, name, species, breed, age, sex, photo_url, pet_id, rfid_tag, status"),
     ]);
+    if (version !== ownerLoadVersion.current) return;
 
     if (profilesError) {
       const message = profilesError.message || "Unable to load owner profiles.";
@@ -219,6 +249,48 @@ const Owners = () => {
     setSelected(updated);
     setEditing(false);
     toast.success("Owner profile updated.");
+  };
+
+  const openAccountConfirmation = (type: OwnerAccountAction, owner: OwnerRecord) => {
+    setAccountActionError(null);
+    setAccountAction({ type, owner });
+  };
+
+  const confirmAccountAction = async () => {
+    if (!accountAction || accountActionLock.current) return;
+    const { type, owner } = accountAction;
+    accountActionLock.current = true;
+    setAccountActionBusy(true);
+    setAccountActionError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke<{ success: boolean; email?: string }>("admin-users", {
+        body: { action: type, userId: owner.id },
+      });
+      if (error) {
+        if (error instanceof FunctionsFetchError) {
+          throw new Error("The owner account service could not be reached. Check that the admin-users Edge Function is deployed and reachable.");
+        }
+        const details = error instanceof FunctionsHttpError ? await error.context.json().catch(() => null) : null;
+        throw new Error(typeof details?.error === "string" ? details.error : error.message);
+      }
+      if (!data?.success) throw new Error("The server did not confirm this action.");
+
+      setAccountAction(null);
+      if (type === "delete-owner-account") {
+        setOwnerRows((current) => current.filter((item) => item.id !== owner.id));
+        setSelected(null);
+        setEditing(false);
+        toast.success(`${owner.name}'s account was deleted.`);
+        void loadOwners();
+      } else {
+        toast.success(data.email ? `Password reset link sent to ${data.email}.` : "Password reset link sent.");
+      }
+    } catch (error) {
+      setAccountActionError(error instanceof Error ? error.message : "Unable to complete this action.");
+    } finally {
+      accountActionLock.current = false;
+      setAccountActionBusy(false);
+    }
   };
 
   const refresh = () => {
@@ -545,7 +617,7 @@ const Owners = () => {
                         variant="outline"
                         onClick={() => {
                           setSelected(owner);
-                          setDraft({ name: owner.name, phone: owner.phone, address: owner.address, barangay: owner.barangay, status: owner.status === "active" ? "approved" : owner.status });
+                          setDraft({ name: owner.name, phone: owner.phone, address: owner.address, barangay: owner.barangay, status: owner.status === "active" ? "approved" : owner.status === "rejected" ? "rejected" : "pending" });
                           setEditing(true);
                         }}
                         className="size-7 rounded-lg border-border text-muted-foreground hover:border-primary/30 hover:text-primary"
@@ -589,10 +661,10 @@ const Owners = () => {
           }
         }}
       >
-        <DialogContent className="max-h-[min(88dvh,720px)] w-[calc(100%-2rem)] max-w-[480px] grid-cols-[minmax(0,1fr)] overflow-x-hidden overflow-y-auto rounded-2xl border-border p-4 sm:rounded-2xl sm:p-5">
+        <DialogContent showCloseButton={false} className="max-h-[min(88dvh,720px)] w-[calc(100%-2rem)] max-w-[480px] grid-cols-[minmax(0,1fr)] overflow-x-hidden overflow-y-auto rounded-2xl border-border p-4 sm:rounded-2xl sm:p-5">
           {selected ? (
             <>
-              <DialogHeader className="pr-6 text-left">
+              <DialogHeader className="pr-9 text-left">
                 <div className="flex items-center gap-3">
                   <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary-soft text-[12px] font-bold text-primary">
                     {initials(selected.name)}
@@ -607,6 +679,23 @@ const Owners = () => {
                   </div>
                 </div>
               </DialogHeader>
+              <DropdownMenu modal={false}>
+                <DropdownMenuTrigger asChild>
+                  <Button ref={accountMenuRef} type="button" variant="ghost" size="icon" className="absolute right-3 top-3 size-8 rounded-lg" aria-label="Owner account actions">
+                    <MoreVertical className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44 rounded-xl" onCloseAutoFocus={(event) => {
+                  if (accountAction) event.preventDefault();
+                }}>
+                  <DropdownMenuItem onSelect={() => openAccountConfirmation("reset-owner-password", selected)} className="gap-2">
+                    <KeyRound className="size-4" />Reset password
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => openAccountConfirmation("delete-owner-account", selected)} className="gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive">
+                    <Trash2 className="size-4" />Delete account
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
 
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center gap-2">
@@ -712,19 +801,52 @@ const Owners = () => {
                       <Plus className="size-4" />Register a pet for {selected.name.split(" ")[0]}
                     </Button>
                   ) : null}
-                  <Button
-                    variant="outline"
-                    onClick={() => setSelected(null)}
-                    className="h-10 w-full rounded-xl border-border text-[12px] font-semibold"
-                  >
-                    Close record
-                  </Button>
+                  <DialogClose asChild>
+                    <Button variant="outline" className="h-10 w-full rounded-xl border-border text-[12px] font-semibold">
+                      Close record
+                    </Button>
+                  </DialogClose>
                 </div>
               </div>
             </>
           ) : null}
         </DialogContent>
       </Dialog>
+      <AlertDialog open={Boolean(accountAction)} onOpenChange={(open) => {
+        if (!open && !accountActionLock.current) setAccountAction(null);
+      }}>
+        <AlertDialogContent
+          className="w-[calc(100%-2rem)] max-w-[440px] rounded-2xl border-border"
+          onCloseAutoFocus={(event) => {
+            if (accountMenuRef.current) {
+              event.preventDefault();
+              accountMenuRef.current.focus();
+            }
+          }}
+        >
+          {accountAction ? (
+            <>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {accountAction.type === "delete-owner-account"
+                    ? `Permanently delete sign-in access for ${accountAction.owner.name}? Their linked pet and adoption records will be kept.`
+                    : `Send a password reset link to the email registered to ${accountAction.owner.name}?`}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              {accountActionError ? <p role="alert" className="text-sm text-destructive">{accountActionError}</p> : null}
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={accountActionBusy}>Cancel</AlertDialogCancel>
+                <Button type="button" variant={accountAction.type === "delete-owner-account" ? "destructive" : "default"} disabled={accountActionBusy} onClick={() => void confirmAccountAction()}>
+                  {accountAction.type === "delete-owner-account"
+                    ? accountActionBusy ? "Deleting..." : "Delete account"
+                    : accountActionBusy ? "Sending..." : "Send reset link"}
+                </Button>
+              </AlertDialogFooter>
+            </>
+          ) : null}
+        </AlertDialogContent>
+      </AlertDialog>
     </AppShell>
   );
 };

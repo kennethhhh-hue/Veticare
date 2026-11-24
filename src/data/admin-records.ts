@@ -14,7 +14,6 @@ export interface PetRegistration {
   owner: string;
   phone: string;
   ownerId?: string;
-  microchip: string | null;
   petId?: string | null;
   rfidTag?: string | null;
   qrCode?: string | null;
@@ -47,7 +46,6 @@ export const registrations: PetRegistration[] = [
     gender: "Male",
     owner: "Juan Dela Cruz",
     phone: "0905 123 4567",
-    microchip: "900215000123456",
     registered: "May 23, 2026",
     registeredAt: "2026-05-23",
     status: "approved",
@@ -60,7 +58,6 @@ export const registrations: PetRegistration[] = [
     gender: "Female",
     owner: "Maria Santos",
     phone: "0917 234 5678",
-    microchip: "900215000123457",
     registered: "May 22, 2026",
     registeredAt: "2026-05-22",
     status: "approved",
@@ -73,7 +70,6 @@ export const registrations: PetRegistration[] = [
     gender: "Female",
     owner: "New Owner Draft",
     phone: "—",
-    microchip: null,
     registered: "Draft",
     registeredAt: "2026-05-24",
     status: "pending",
@@ -87,7 +83,6 @@ export const registrations: PetRegistration[] = [
     gender: "Female",
     owner: "Ana Reyes",
     phone: "0918 555 0134",
-    microchip: "900215000123458",
     registered: "May 20, 2026",
     registeredAt: "2026-05-20",
     status: "pending",
@@ -100,7 +95,6 @@ export const registrations: PetRegistration[] = [
     gender: "Male",
     owner: "Kevin Uy",
     phone: "0917 884 2299",
-    microchip: null,
     registered: "May 18, 2026",
     registeredAt: "2026-05-18",
     status: "rejected",
@@ -113,7 +107,6 @@ export const registrations: PetRegistration[] = [
     gender: "Female",
     owner: "Dana Flores",
     phone: "0921 776 3344",
-    microchip: "900215000123461",
     registered: "May 17, 2026",
     registeredAt: "2026-05-17",
     status: "pending",
@@ -126,7 +119,6 @@ export const registrations: PetRegistration[] = [
     gender: "Male",
     owner: "Ella Mendoza",
     phone: "0916 220 8890",
-    microchip: "900215000123462",
     registered: "May 16, 2026",
     registeredAt: "2026-05-16",
     status: "approved",
@@ -139,7 +131,6 @@ export const registrations: PetRegistration[] = [
     gender: "Male",
     owner: "Marvin Lim",
     phone: "0919 334 7781",
-    microchip: null,
     registered: "May 15, 2026",
     registeredAt: "2026-05-15",
     status: "pending",

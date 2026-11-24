@@ -86,7 +86,6 @@ export function AddPetDialog({ open, owners, onOpenChange, onCreated }: AddPetDi
       owner: owner.name,
       ownerId: owner.id,
       phone: owner.phone,
-      microchip: null,
       registered: new Date().toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }),
       registeredAt: new Date().toISOString().slice(0, 10),
       status: "pending",

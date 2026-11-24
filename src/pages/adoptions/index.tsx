@@ -105,7 +105,7 @@ const Adoptions = () => {
     setLoadError(null);
     const [applicationsResult, profilesResult, impoundsResult] = await Promise.all([
       supabase.from("adoption_applications").select("*").order("created_at", { ascending: false }),
-      supabase.from("profiles").select("id, full_name, email, phone, barangay").eq("role", "owner").order("full_name"),
+      supabase.from("profiles").select("id, full_name, email, phone, barangay, account_deleted_at").eq("role", "owner").order("full_name"),
       supabase.from("impounds").select("id, impound_id, name, breed, animal_type, adoption_status, impound_status"),
     ]);
     const error = applicationsResult.error ?? profilesResult.error ?? impoundsResult.error;
@@ -117,7 +117,7 @@ const Adoptions = () => {
 
     const profileById = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile]));
     const impoundById = new Map((impoundsResult.data ?? []).map((animal) => [animal.id, animal]));
-    setApplicants((profilesResult.data ?? []).map((profile) => ({
+    setApplicants((profilesResult.data ?? []).filter((profile) => !profile.account_deleted_at).map((profile) => ({
       id: profile.id,
       name: profile.full_name || profile.email || "Pet owner",
       email: profile.email || "",

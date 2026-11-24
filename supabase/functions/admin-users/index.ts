@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 type ManagedRole = "admin" | "personnel" | "owner";
-type Action = "list" | "invite" | "update" | "remove";
+type Action = "list" | "invite" | "update" | "remove" | "reset-owner-password" | "delete-owner-account";
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -51,7 +51,11 @@ Deno.serve(async (request) => {
 
   let payload: Record<string, unknown>;
   try {
-    payload = await request.json();
+    const body = await request.json();
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return json({ error: "Request body must be a JSON object." }, 400);
+    }
+    payload = body;
   } catch {
     return json({ error: "Request body must be valid JSON." }, 400);
   }
@@ -68,7 +72,8 @@ Deno.serve(async (request) => {
 
     const { data: profiles, error } = await admin
       .from("profiles")
-      .select("id, email, full_name, role, approval_status, is_active, created_at");
+      .select("id, email, full_name, role, approval_status, is_active, created_at")
+      .is("account_deleted_at", null);
     if (error) return json({ error: error.message }, 500);
 
     const authById = new Map(users.map((user) => [user.id, user]));
@@ -114,17 +119,57 @@ Deno.serve(async (request) => {
     return json({ success: true });
   }
 
-  const userId = String(payload.userId ?? "");
-  if (!userId) return json({ error: "User ID is required." }, 400);
+  const userId = typeof payload.userId === "string" ? payload.userId.trim().toLowerCase() : "";
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(userId)) {
+    return json({ error: "A valid user ID is required." }, 400);
+  }
   if (userId === callerData.user.id) return json({ error: "You cannot change or remove your own account here." }, 400);
 
   const { data: target, error: targetError } = await admin
     .from("profiles")
-    .select("id, role, is_active")
+    .select("id, role, is_active, account_deleted_at")
     .eq("id", userId)
     .maybeSingle();
   if (targetError) return json({ error: targetError.message }, 500);
   if (!target) return json({ error: "User not found." }, 404);
+
+  if (action === "reset-owner-password" || action === "delete-owner-account") {
+    if (target.role !== "owner") return json({ error: "This action is only available for owner accounts." }, 403);
+    if (target.account_deleted_at) {
+      return action === "delete-owner-account"
+        ? json({ success: true })
+        : json({ error: "This owner account was deleted." }, 409);
+    }
+
+    if (action === "delete-owner-account") {
+      const { error } = await admin.auth.admin.deleteUser(userId, true);
+      if (error) return json({ error: error.message }, 400);
+      return json({ success: true });
+    }
+
+    if (!target.is_active) return json({ error: "This owner account is inactive." }, 409);
+    let redirectTo: string;
+    try {
+      const siteUrl = new URL(Deno.env.get("APP_SITE_URL") ?? "");
+      const local = ["localhost", "127.0.0.1", "[::1]"].includes(siteUrl.hostname);
+      if (siteUrl.protocol !== "https:" && !(local && siteUrl.protocol === "http:")) throw new Error();
+      redirectTo = new URL("/login/owner/reset-password", siteUrl).href;
+    } catch {
+      return json({ error: "Set a valid APP_SITE_URL on the server before sending reset emails." }, 500);
+    }
+
+    const { data, error: lookupError } = await admin.auth.admin.getUserById(userId);
+    if (lookupError) return json({ error: lookupError.message }, 400);
+    const email = data.user?.email;
+    if (!email || !data.user.email_confirmed_at) {
+      return json({ error: "The owner must have a confirmed email address to receive a password reset link." }, 409);
+    }
+    const { error } = await admin.auth.resetPasswordForEmail(email, { redirectTo });
+    if (error) return json({ error: error.message }, error.status === 429 ? 429 : 400);
+    return json({ success: true, email });
+  }
+
+  if (target.account_deleted_at) return json({ error: "This account was deleted." }, 409);
 
   if (action === "update") {
     const role = payload.role as ManagedRole;

@@ -199,8 +199,7 @@ export function ScannerScreen({ pets, openFollowUps, onRecord, onRequestFollowUp
         item.id.toLowerCase().endsWith(query) ||
         item.qrCode?.replace(/[\s-]/g, "").toLowerCase() === normalizedQuery ||
         item.name.toLowerCase() === query ||
-        item.rfidTag?.replace(/[\s-]/g, "").toLowerCase() === normalizedQuery ||
-        item.microchip?.replace(/[\s-]/g, "").toLowerCase() === normalizedQuery,
+        item.rfidTag?.replace(/[\s-]/g, "").toLowerCase() === normalizedQuery,
     );
     if (!match) {
       setManualError("No pet found for that ID. Check the registration number.");
