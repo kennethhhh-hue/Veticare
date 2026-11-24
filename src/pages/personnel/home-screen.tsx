@@ -17,6 +17,8 @@ import {
 import type { PersonnelImpoundReport } from "@/pages/personnel";
 import type { OwnerNotification } from "@/pages/owner-app/notifications-screen";
 import { getPhilippineDateKey } from "@/lib/philippine-date";
+import { cn } from "@/lib/utils";
+import { NotificationDetail } from "@/components/veticare/notification-detail";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
@@ -86,22 +88,28 @@ export function HomeScreen({ scans, verifiedCount, reviewCount, activityReady, t
         setNotificationsOpen(open);
         if (!open) setSelectedNotification(null);
       }}>
-        <DialogContent className="max-h-[min(85dvh,600px)] w-[calc(100%-2rem)] overflow-y-auto rounded-xl border-border bg-card p-5 sm:max-w-[440px]">
-          <DialogHeader>
-            <DialogTitle className="break-words pr-6">{selectedNotification ? selectedNotification.title : "Notifications"}</DialogTitle>
-            <DialogDescription>
-              {selectedNotification
-                ? new Date(selectedNotification.created_at).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Manila" })
-                : unreadNotifications ? `${unreadNotifications} unread` : "You are all caught up."}
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent className={cn(
+          "max-h-[min(85dvh,600px)] w-[calc(100%-2rem)] overflow-y-auto rounded-xl border-border bg-card p-5 sm:max-w-[440px]",
+          selectedNotification && "max-w-[440px] rounded-2xl pt-10 shadow-raised sm:rounded-2xl",
+        )}>
+          {!selectedNotification ? (
+            <DialogHeader>
+              <DialogTitle className="break-words pr-6">Notifications</DialogTitle>
+              <DialogDescription>
+                {unreadNotifications ? `${unreadNotifications} unread` : "You are all caught up."}
+              </DialogDescription>
+            </DialogHeader>
+          ) : null}
           {selectedNotification ? (
-            <div className="space-y-4">
-              <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">{selectedNotification.message}</p>
-              <Button type="button" variant="outline" onClick={() => setSelectedNotification(null)}>
+            <>
+              <NotificationDetail
+                notification={selectedNotification}
+                formattedDate={new Date(selectedNotification.created_at).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Manila" })}
+              />
+              <Button type="button" variant="outline" className="justify-self-start" onClick={() => setSelectedNotification(null)}>
                 <ArrowLeft className="size-4" />Back to notifications
               </Button>
-            </div>
+            </>
           ) : notifications.length ? (
             <ul className="divide-y divide-border border-y border-border">
               {notifications.map((notification) => (
@@ -251,7 +259,7 @@ export function HomeScreen({ scans, verifiedCount, reviewCount, activityReady, t
                     {report.status === "reviewed" ? "Reviewed" : "Pending review"}
                   </span>
                 </div>
-                <p className="mt-1 break-words text-[9px] text-muted-foreground">{report.reason}</p>
+                {report.reason ? <p className="mt-1 break-words text-[9px] text-muted-foreground">{report.reason}</p> : null}
               </li>
             ))}
           </ul>

@@ -164,7 +164,6 @@ export function ProfileScreen({
 
       <div className="mt-5 flex flex-col items-center gap-1 px-5 text-center">
         <span className="flex items-center gap-1 text-[9px] font-semibold text-muted-foreground"><Stethoscope className="size-3 text-primary" />City Veterinary Office</span>
-        <p className="text-[8.5px] text-muted-foreground/70">Owner app • sample data</p>
       </div>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>

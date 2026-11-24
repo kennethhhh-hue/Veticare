@@ -49,7 +49,7 @@ export function PullToRefresh({ children, disabled = false }: { children: ReactN
 
   return (
     <div
-      className="page-wash scroll-slim min-h-0 flex-1 overflow-y-auto overscroll-contain"
+      className="page-wash scroll-slim min-h-0 flex-1 overflow-y-auto overscroll-contain pb-20 sm:pb-0"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}

@@ -364,7 +364,7 @@ const OwnerApp = () => {
             </PullToRefresh>
 
             {showTabs ? (
-              <nav className="shrink-0 border-t border-border bg-card/95 px-2 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-xl">
+              <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card/95 px-2 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-xl sm:relative sm:inset-auto sm:z-auto sm:shrink-0">
                 <div className="flex items-center justify-around gap-1">
                   {tabs.map((item) => {
                     const Icon = item.icon;
@@ -406,8 +406,6 @@ const OwnerApp = () => {
         </div>
 
         <p className="mt-3 hidden items-center justify-center gap-2 text-center text-[10.5px] text-muted-foreground sm:flex">
-          Veticare owner app • sample data
-          <span className="text-muted-foreground/40">|</span>
           <button
             type="button"
             onClick={() => navigate("/")}

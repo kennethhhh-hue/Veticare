@@ -21,7 +21,7 @@ type Report = {
   reported_by: string;
   location_found: string;
   date_impounded: string;
-  reason: string;
+  reason: string | null;
   status: string;
   created_at: string;
 };
@@ -180,7 +180,9 @@ export function PersonnelImpoundReports() {
                 <p className="text-xs text-foreground"><span className="font-semibold">Date impounded:</span> {new Date(`${report.date_impounded}T12:00:00Z`).toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "numeric", timeZone: PHILIPPINE_TIME_ZONE })}</p>
               </div>
               <div className="min-w-0 space-y-1 text-xs text-foreground">
-                <p className="whitespace-pre-wrap break-words"><span className="font-semibold">Reason:</span> {report.reason}</p>
+                {report.reason ? (
+                  <p className="whitespace-pre-wrap break-words"><span className="font-semibold">Reason:</span> {report.reason}</p>
+                ) : null}
                 <p className="break-words"><span className="font-semibold">Reporter:</span> {report.reporter}</p>
                 <p><span className="font-semibold">Reported:</span> {new Date(report.created_at).toLocaleString("en-PH", { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: PHILIPPINE_TIME_ZONE })}</p>
               </div>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
   Check,
@@ -11,7 +12,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import type { StatusKey, VerificationItem } from "@/data/veticare";
+import { sidebarCountKeys, type StatusKey, type VerificationItem } from "@/data/veticare";
 import { supabase } from "@/integrations/supabase/client";
 import { PHILIPPINE_TIME_ZONE } from "@/lib/philippine-date";
 
@@ -34,6 +35,7 @@ interface VerificationQueueProps {
 
 export function VerificationQueue({ id }: VerificationQueueProps) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [items, setItems] = useState<VerificationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -106,6 +108,7 @@ export function VerificationQueue({ id }: VerificationQueueProps) {
       toast.error(error.message);
       return;
     }
+    void queryClient.invalidateQueries({ queryKey: sidebarCountKeys.registrations });
     toast.success(`${item.pet} registration rejected.`);
     await loadQueue();
   };
@@ -124,9 +127,11 @@ export function VerificationQueue({ id }: VerificationQueueProps) {
             </p>
             <h2 className="mt-1 flex flex-wrap items-center gap-2 text-[17px] font-extrabold tracking-[-0.02em] text-foreground">
               Registration queue
-              <span className="num rounded-full bg-warning/12 px-2 py-0.5 text-[10.5px] font-bold text-warning">
-                {counts.pending} waiting
-              </span>
+              {!loading && !loadError && counts.pending > 0 ? (
+                <span className="num rounded-full bg-warning/12 px-2 py-0.5 text-[10.5px] font-bold text-warning">
+                  {counts.pending} waiting
+                </span>
+              ) : null}
             </h2>
             <p className="mt-0.5 text-[12px] text-muted-foreground">
               Live owner submissions. Assign Pet ID and RFID in Pet Registrations before approval.
@@ -149,14 +154,16 @@ export function VerificationQueue({ id }: VerificationQueueProps) {
               )}
             >
               {t.label}
-              <span
-                className={cn(
-                  "num rounded-full px-1.5 text-[10px] font-bold",
-                  tab === t.key ? "bg-primary-soft text-primary" : "bg-card/60 text-muted-foreground",
-                )}
-              >
-                {counts[t.key]}
-              </span>
+              {!loading && !loadError && counts[t.key] > 0 ? (
+                <span
+                  className={cn(
+                    "num rounded-full px-1.5 text-[10px] font-bold",
+                    tab === t.key ? "bg-primary-soft text-primary" : "bg-card/60 text-muted-foreground",
+                  )}
+                >
+                  {counts[t.key]}
+                </span>
+              ) : null}
             </button>
           ))}
         </div>

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Check,
   Clock,
+  Eye,
   Heart,
   HeartHandshake,
   Mail,
@@ -44,6 +46,7 @@ import {
   type HomeVisit,
 } from "@/data/shelter-records";
 import { supabase } from "@/integrations/supabase/client";
+import { sidebarCountKeys } from "@/data/veticare";
 
 interface ApplicantOption {
   id: string;
@@ -63,6 +66,12 @@ interface AnimalOption {
 
 const PAGE_SIZE = 5;
 
+const homeVisitLabels: Record<HomeVisit, string> = {
+  pending: "Pending",
+  scheduled: "Scheduled",
+  passed: "Completed",
+};
+
 const initials = (name: string) =>
   name
     .split(" ")
@@ -71,6 +80,7 @@ const initials = (name: string) =>
     .join("");
 
 const Adoptions = () => {
+  const queryClient = useQueryClient();
   const [rows, setRows] = useState<AdoptionApplication[]>([]);
   const [applicants, setApplicants] = useState<ApplicantOption[]>([]);
   const [availableAnimals, setAvailableAnimals] = useState<AnimalOption[]>([]);
@@ -200,15 +210,32 @@ const Adoptions = () => {
 
   const decide = async (application: AdoptionApplication, next: AdoptionStatus) => {
     const decisionDate = next === "pending" ? null : getPhilippineDateKey();
-    const { error } = await supabase.from("adoption_applications").update({ status: next, decision_date: decisionDate }).eq("id", application.id);
+    const completesHomeVisit = next === "approved" || next === "completed";
+    const update = {
+      status: next,
+      decision_date: decisionDate,
+      ...(completesHomeVisit ? { home_visit_status: "passed" } : {}),
+    };
+    const { error } = await supabase.from("adoption_applications")
+      .update(update)
+      .eq("id", application.id)
+      .select("id")
+      .single();
     if (error) {
       toast.error(error.message);
       return;
     }
-    setRows((prev) => prev.map((item) => (item.id === application.id ? { ...item, status: next, applicationStatus: next, decisionDate } : item)));
+    const changes: Partial<AdoptionApplication> = {
+      status: next,
+      applicationStatus: next,
+      decisionDate,
+      ...(completesHomeVisit ? { homeVisit: "passed" } : {}),
+    };
+    setRows((prev) => prev.map((item) => item.id === application.id ? { ...item, ...changes } : item));
     setSelected((current) =>
-      current && current.id === application.id ? { ...current, status: next, applicationStatus: next, decisionDate } : current,
+      current?.id === application.id ? { ...current, ...changes } : current,
     );
+    void queryClient.invalidateQueries({ queryKey: sidebarCountKeys.impounded });
 
     if (next === "approved") {
       toast.success(`Application ${application.id} approved`, {
@@ -603,7 +630,7 @@ const Adoptions = () => {
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <StatusPill status={selected.status} />
-                  <StatusPill status={selected.homeVisit} />
+                  <StatusPill status={selected.homeVisit === "passed" ? "completed" : selected.homeVisit} />
                   <span className="rounded-full bg-secondary px-2 py-1 text-[10px] font-semibold text-secondary-foreground">
                     {selected.pet} • {selected.petBreed}
                   </span>
@@ -616,7 +643,7 @@ const Adoptions = () => {
                     { label: "Application date", value: selected.applicationDate, icon: Clock },
                     { label: "Decision date", value: selected.decisionDate ?? "Not decided", icon: Clock },
                     { label: "Application status", value: selected.applicationStatus, icon: Heart },
-                    { label: "Home visit", value: selected.homeVisit, icon: MapPin },
+                    { label: "Home visit", value: homeVisitLabels[selected.homeVisit], icon: MapPin },
                     { label: "Mobile", value: selected.phone, icon: Phone },
                     { label: "Email", value: selected.email, icon: Mail },
                     { label: "Barangay", value: selected.area, icon: MapPin },

@@ -1,6 +1,15 @@
 export type RegistrationState = "active" | "expiring" | "expired" | "unregistered";
 export type VaccinationState = "complete" | "due" | "overdue" | "unknown";
 export type ScanResult = "verified" | "flagged" | "expired" | "unregistered";
+export type ScanFollowUpRequest =
+  | { type: "vaccination"; vaccineName: string; lastVaccinationDate: string | null }
+  | { type: "registration" };
+export type ScanFollowUp = ScanFollowUpRequest["type"];
+
+export const scanFollowUpLabels: Record<ScanFollowUp, string> = {
+  vaccination: "For Vaccination",
+  registration: "For Registration",
+};
 
 export interface PersonnelPet {
   id: string;

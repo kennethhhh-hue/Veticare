@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Clock,
   HeartHandshake,
@@ -49,6 +50,7 @@ import {
   type ImpoundStatus,
 } from "@/data/shelter-records";
 import { supabase } from "@/integrations/supabase/client";
+import { sidebarCountKeys } from "@/data/veticare";
 
 const PAGE_SIZE = 5;
 
@@ -116,6 +118,7 @@ const mapImpoundRow = (row: {
 };
 
 const ImpoundedDogs = () => {
+  const queryClient = useQueryClient();
   const [rows, setRows] = useState<ImpoundedDog[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -186,6 +189,7 @@ const ImpoundedDogs = () => {
     setUnvaccinated(false);
     setPage(1);
     void loadImpounds();
+    void queryClient.invalidateQueries({ queryKey: sidebarCountKeys.impounded });
     toast.success("Impound list refreshed from Supabase.");
   };
 
@@ -199,6 +203,7 @@ const ImpoundedDogs = () => {
     }
     setRows((prev) => prev.map((item) => (item.id === dog.id ? { ...item, status: next, impoundStatus, adoptionStatus } : item)));
     setSelected((current) => (current && current.id === dog.id ? { ...current, status: next, impoundStatus, adoptionStatus } : current));
+    void queryClient.invalidateQueries({ queryKey: sidebarCountKeys.impounded });
     toast.success(`${dog.name} moved to ${statusLabel[next].toLowerCase()}`, {
       description: `Kennel ${dog.kennel} is up to date in the shelter log.`,
     });
@@ -228,6 +233,7 @@ const ImpoundedDogs = () => {
       return;
     }
     const record = mapImpoundRow(data);
+    void queryClient.invalidateQueries({ queryKey: sidebarCountKeys.impounded });
     setRows((current) => [record, ...current]);
     setPage(1);
     setIntake({ name: "", type: "Dog", breed: "", sex: "Male", age: "", color: "", date: new Date().toISOString().slice(0, 10), location: "" });
@@ -655,11 +661,13 @@ const ImpoundedDogs = () => {
 
                 <div className="flex flex-col gap-2">
                   <Button
-                    onClick={() => moveTo(selected, "reserved")}
-                    disabled={selected.status === "reserved"}
+                    onClick={() => moveTo(selected, "kennel")}
+                    disabled={selected.impoundStatus === "impounded" && selected.adoptionStatus === "available"}
                     className="h-10 w-full rounded-xl text-[12px] font-bold shadow-glow"
                   >
-                    Put on adoption hold
+                    {selected.impoundStatus === "impounded" && selected.adoptionStatus === "available"
+                      ? "Available for adoption"
+                      : "Put on adoption"}
                   </Button>
                   <Button
                     variant="outline"

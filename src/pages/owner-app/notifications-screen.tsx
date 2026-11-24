@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Bell, Check, CheckCheck, ChevronRight } from "lucide-react";
+import { NotificationDetail } from "@/components/veticare/notification-detail";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import type { Database } from "@/integrations/supabase/types";
 
 export type OwnerNotification = Database["public"]["Tables"]["notifications"]["Row"];
@@ -64,14 +65,13 @@ export function NotificationsScreen({ notifications, onMarkRead, onOpenPet }: No
         )}
       </ul>
       <Dialog open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelected(null); }}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-xl border-border bg-card sm:max-w-[440px]">
-          <DialogHeader>
-            <DialogTitle className="break-words pr-6">{selected?.title}</DialogTitle>
-            <DialogDescription>
-              {selected ? new Date(selected.created_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : ""}
-            </DialogDescription>
-          </DialogHeader>
-          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">{selected?.message}</p>
+        <DialogContent className="max-h-[min(85dvh,600px)] w-[calc(100%-2rem)] max-w-[440px] overflow-y-auto rounded-2xl border-border bg-card p-5 pt-10 shadow-raised sm:rounded-2xl">
+          {selected ? (
+            <NotificationDetail
+              notification={selected}
+              formattedDate={new Date(selected.created_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
+            />
+          ) : null}
           {selected?.pet_record_id ? (
             <Button type="button" onClick={() => {
               if (onOpenPet(selected.pet_record_id!)) setSelected(null);

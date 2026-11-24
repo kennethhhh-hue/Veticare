@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
   Check,
@@ -36,6 +37,7 @@ import {
 import { cn } from "@/lib/utils";
 import { PetPhoto } from "@/components/owner-app/pet-photo";
 import { type PetRegistration, type RegistrationStatus } from "@/data/admin-records";
+import { sidebarCountKeys } from "@/data/veticare";
 import { supabase } from "@/integrations/supabase/client";
 import { AddPetDialog, type OwnerAccountOption } from "./add-pet-dialog";
 
@@ -45,6 +47,7 @@ const genderClass = (gender: PetRegistration["gender"]) =>
   gender === "Male" ? "text-info" : "text-destructive/80";
 
 const Registrations = () => {
+  const queryClient = useQueryClient();
   const [rows, setRows] = useState<PetRegistration[]>([]);
   const [ownerOptions, setOwnerOptions] = useState<OwnerAccountOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -176,6 +179,7 @@ const Registrations = () => {
     setMissingChipOnly(false);
     setPage(1);
     void loadRegistry();
+    void queryClient.invalidateQueries({ queryKey: sidebarCountKeys.registrations });
     toast.success("Registration list refreshed.");
   };
 
@@ -342,6 +346,7 @@ const Registrations = () => {
       description: `Pet ID and QR ${issuePetId.trim()} • RFID ${issueRfid.trim()}. Owner notified to pick up the collar at OCVAS.`,
     });
     setIssueTarget(null);
+    void queryClient.invalidateQueries({ queryKey: sidebarCountKeys.registrations });
     await loadRegistry();
   };
 
@@ -352,6 +357,7 @@ const Registrations = () => {
       return;
     }
     setRows((prev) => prev.map((item) => (item.id === row.id ? { ...item, status: next } : item)));
+    void queryClient.invalidateQueries({ queryKey: sidebarCountKeys.registrations });
     if (next === "rejected") {
       toast.error(`${row.name} rejected`, {
         description: "The owner will be notified to complete the requirements.",
@@ -758,6 +764,7 @@ const Registrations = () => {
             return false;
           }
           setPage(1);
+          void queryClient.invalidateQueries({ queryKey: sidebarCountKeys.registrations });
           await loadRegistry();
           toast.success("Pet registration added to Supabase.");
           return true;

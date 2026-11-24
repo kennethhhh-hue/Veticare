@@ -18,8 +18,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loadedProfileId, setLoadedProfileId] = useState<string | null>(null);
 
   useEffect(() => {
-    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
       setSession(nextSession);
+      if (event === "SIGNED_OUT") {
+        setRole(null);
+        setApprovalStatus(null);
+        setIsActive(null);
+        setLoadedProfileId(null);
+      }
       setSessionReady(true);
     });
 

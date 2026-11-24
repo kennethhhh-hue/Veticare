@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { CircleAlert, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -13,43 +12,12 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { scanFollowUpLabels } from "@/data/personnel";
 import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
 import { PHILIPPINE_TIME_ZONE } from "@/lib/philippine-date";
 
-type ReviewFlag = {
-  id: string;
-  pet_record_id: string;
-  reported_by: string;
-  scan_id: string | null;
-  status: "open" | "resolved";
-  created_at: string;
-};
-
-type ReviewDatabase = {
-  public: {
-    Tables: {
-      personnel_review_flags: {
-        Row: ReviewFlag;
-        Insert: never;
-        Update: never;
-        Relationships: [];
-      };
-    };
-    Views: Record<string, never>;
-    Functions: {
-      resolve_personnel_review_flag: {
-        Args: { p_flag_id: string };
-        Returns: boolean;
-      };
-    };
-    Enums: Record<string, never>;
-    CompositeTypes: Record<string, never>;
-  };
-};
-
-const reviewClient = supabase as unknown as SupabaseClient<ReviewDatabase>;
-
-type QueueItem = ReviewFlag & {
+type QueueItem = Tables<"personnel_review_flags"> & {
   petName: string;
   petId: string;
   reporter: string;
@@ -69,9 +37,9 @@ export function PersonnelReviewQueue() {
     setLoading(true);
     setLoadError(null);
     try {
-      const { data: flags, error: flagsError } = await reviewClient
+      const { data: flags, error: flagsError } = await supabase
         .from("personnel_review_flags")
-        .select("id, pet_record_id, reported_by, scan_id, status, created_at")
+        .select("*")
         .eq("status", "open")
         .order("created_at", { ascending: false });
       if (flagsError) throw flagsError;
@@ -101,6 +69,7 @@ export function PersonnelReviewQueue() {
         const scan = flag.scan_id ? scans.get(flag.scan_id) : undefined;
         return {
           ...flag,
+          request_type: flag.request_type ?? "general",
           petName: pet?.name || "Pet unavailable",
           petId: pet?.pet_id || `Pet ID unavailable; record ${flag.pet_record_id}`,
           reporter: profile?.full_name || profile?.email || `Reporter unavailable (${flag.reported_by})`,
@@ -124,7 +93,7 @@ export function PersonnelReviewQueue() {
     setResolving(true);
     setResolveError(null);
     try {
-      const { data, error } = await reviewClient.rpc("resolve_personnel_review_flag", { p_flag_id: selected.id });
+      const { data, error } = await supabase.rpc("resolve_personnel_review_flag", { p_flag_id: selected.id });
       if (error) throw error;
       if (data !== true) {
         setResolveError("This flag was not resolved. It may no longer be open; refresh the queue to check.");
@@ -167,6 +136,20 @@ export function PersonnelReviewQueue() {
               <li key={item.id} className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                 <div className="min-w-0">
                   <p className="break-words text-[13px] font-bold text-foreground">{item.petName} <span className="font-semibold text-muted-foreground">({item.petId})</span></p>
+                  {item.request_type !== "general" ? (
+                    <p className="text-[11px] font-semibold text-primary">{scanFollowUpLabels[item.request_type]}</p>
+                  ) : null}
+                  {item.vaccine_name ? (
+                    <p className="break-words text-[11px] text-foreground">Vaccine: {item.vaccine_name}</p>
+                  ) : null}
+                  {item.last_vaccination_date ? (
+                    <p className="text-[11px] text-foreground">
+                      Last vaccination date{" "}
+                      <time dateTime={item.last_vaccination_date} className="font-semibold">
+                        {new Date(item.last_vaccination_date).toLocaleDateString("en-PH", { dateStyle: "medium", timeZone: "UTC" })}
+                      </time>
+                    </p>
+                  ) : null}
                   <p className="mt-0.5 break-words text-[11px] text-muted-foreground">Reported by {item.reporter}</p>
                   {item.scanNote ? <p className="mt-1 break-words text-[11px] text-foreground">Scan result: {item.scanResult} · {item.scanNote}</p> : null}
                   <time dateTime={item.created_at} className="mt-0.5 block text-[10px] text-muted-foreground">

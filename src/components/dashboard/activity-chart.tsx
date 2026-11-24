@@ -169,9 +169,11 @@ export function ActivityChart({ range, onRangeChange }: ActivityChartProps) {
           <span className="text-[11.5px] text-muted-foreground">Completed adoptions</span>
           <span className="num text-[13px] font-bold text-foreground">{adoptions}</span>
         </div>
-        <span className="ml-auto rounded-full bg-primary-soft px-2 py-1 text-[10.5px] font-bold text-primary">
-          Live Supabase data
-        </span>
+        {!loading && (registrations > 0 || adoptions > 0) ? (
+          <span className="ml-auto rounded-full bg-primary-soft px-2 py-1 text-[10.5px] font-bold text-primary">
+            Live Supabase data
+          </span>
+        ) : null}
       </div>
 
       {loadError ? (

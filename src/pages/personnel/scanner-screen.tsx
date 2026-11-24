@@ -5,15 +5,28 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { getPhilippineDateKey } from "@/lib/philippine-date";
 import { PetRecord } from "@/pages/personnel/pet-record";
 import {
+  scanFollowUpLabels,
   type PersonnelPet,
+  type ScanFollowUp,
+  type ScanFollowUpRequest,
   type ScanResult,
 } from "@/data/personnel";
+
+const MAX_VACCINE_NAME_LENGTH = 120;
+const MIN_CALENDAR_DATE = "0001-01-01";
+
+function isValidDateThroughToday(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || value < MIN_CALENDAR_DATE || value > getPhilippineDateKey()) {
+    return false;
+  }
+  const parsedDate = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsedDate.getTime()) && parsedDate.toISOString().slice(0, 10) === value;
+}
 
 const deriveResult = (pet: PersonnelPet): ScanResult => {
   if (pet.registration === "unregistered") return "unregistered";
@@ -35,37 +48,40 @@ const resultNote = (pet: PersonnelPet, result: ScanResult) => {
 
 interface ScannerScreenProps {
   pets: PersonnelPet[];
-  reviewIds: string[];
+  openFollowUps: { pet_record_id: string; request_type: ScanFollowUp }[];
   onRecord: (pet: PersonnelPet, result: ScanResult, note: string) => Promise<string | null>;
-  onFlagScan: (scanId: string, petId: string) => Promise<boolean>;
-  onImpound: (pet: PersonnelPet, locationFound: string, dateImpounded: string, reason: string) => Promise<boolean>;
+  onRequestFollowUp: (scanId: string, petId: string, request: ScanFollowUpRequest) => Promise<boolean>;
+  onImpound: (pet: PersonnelPet, locationFound: string, dateImpounded: string) => Promise<boolean>;
 }
 
-export function ScannerScreen({ pets, reviewIds, onRecord, onFlagScan, onImpound }: ScannerScreenProps) {
+export function ScannerScreen({ pets, openFollowUps, onRecord, onRequestFollowUp, onImpound }: ScannerScreenProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const cameraControlsRef = useRef<{ stop: () => void } | null>(null);
   const scanCompletedRef = useRef(false);
   const submittingRef = useRef(false);
-  const flaggingRef = useRef(false);
+  const savingFollowUpRef = useRef(false);
   const impoundSubmittingRef = useRef(false);
   const [phase, setPhase] = useState<"idle" | "result">("idle");
   const [cameraStarting, setCameraStarting] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
-  const [flagging, setFlagging] = useState(false);
+  const [savingFollowUp, setSavingFollowUp] = useState(false);
   const [pet, setPet] = useState<PersonnelPet | null>(null);
   const [scanId, setScanId] = useState<string | null>(null);
-  const [flagged, setFlagged] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
   const [manualValue, setManualValue] = useState("");
   const [manualError, setManualError] = useState<string | null>(null);
+  const [vaccinationOpen, setVaccinationOpen] = useState(false);
+  const [vaccineName, setVaccineName] = useState("");
+  const [vaccineError, setVaccineError] = useState<string | null>(null);
+  const [lastVaccinationDate, setLastVaccinationDate] = useState("");
+  const [vaccinationDateError, setVaccinationDateError] = useState<string | null>(null);
   const [impoundOpen, setImpoundOpen] = useState(false);
   const [impoundSubmitting, setImpoundSubmitting] = useState(false);
   const [impoundError, setImpoundError] = useState<string | null>(null);
   const [impoundLocation, setImpoundLocation] = useState("");
   const [impoundDate, setImpoundDate] = useState(getPhilippineDateKey);
-  const [impoundReason, setImpoundReason] = useState("");
 
   useEffect(() => () => cameraControlsRef.current?.stop(), []);
 
@@ -90,7 +106,6 @@ export function ScannerScreen({ pets, reviewIds, onRecord, onFlagScan, onImpound
     }
     setPet(nextPet);
     setScanId(id);
-    setFlagged(false);
     setManualOpen(false);
     setManualValue("");
     setPhase("result");
@@ -202,26 +217,45 @@ export function ScannerScreen({ pets, reviewIds, onRecord, onFlagScan, onImpound
     setCameraError(null);
     setPet(null);
     setScanId(null);
-    setFlagged(false);
     setPhase("idle");
   };
 
-  const handleFlag = async () => {
-    if (!scanId || !pet || flaggingRef.current) return;
-    flaggingRef.current = true;
-    setFlagging(true);
+  const handleFollowUp = async (request: ScanFollowUpRequest): Promise<boolean> => {
+    if (!scanId || !pet || savingFollowUpRef.current) return false;
+    savingFollowUpRef.current = true;
+    setSavingFollowUp(true);
     try {
-      if (await onFlagScan(scanId, pet.id)) {
-        setFlagged(true);
-        toast.info(`${pet.name} flagged for OCVAS review`, {
-          description: "The scan was logged for follow-up by the city vet office.",
-        });
-      }
+      const saved = await onRequestFollowUp(scanId, pet.id, request);
+      if (saved) toast.success(`${scanFollowUpLabels[request.type]} request recorded for ${pet.name}.`);
+      return saved;
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to flag the scan.");
+      toast.error(error instanceof Error ? error.message : "Unable to save the request.");
+      return false;
     } finally {
-      flaggingRef.current = false;
-      setFlagging(false);
+      savingFollowUpRef.current = false;
+      setSavingFollowUp(false);
+    }
+  };
+
+  const submitVaccination = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const name = vaccineName.trim();
+    if (!name || Array.from(name).length > MAX_VACCINE_NAME_LENGTH) {
+      setVaccineError(`Enter a vaccine name up to ${MAX_VACCINE_NAME_LENGTH} characters.`);
+      return;
+    }
+    setVaccineError(null);
+    if (lastVaccinationDate && !isValidDateThroughToday(lastVaccinationDate)) {
+      setVaccinationDateError("Enter a valid date on or before today (Philippine time).");
+      return;
+    }
+    setVaccinationDateError(null);
+    if (await handleFollowUp({
+      type: "vaccination",
+      vaccineName: name,
+      lastVaccinationDate: lastVaccinationDate || null,
+    })) {
+      setVaccinationOpen(false);
     }
   };
 
@@ -229,13 +263,11 @@ export function ScannerScreen({ pets, reviewIds, onRecord, onFlagScan, onImpound
     event.preventDefault();
     if (!pet || impoundSubmittingRef.current) return;
     const location = impoundLocation.trim();
-    const reason = impoundReason.trim();
-    const parsedDate = new Date(`${impoundDate}T00:00:00Z`);
-    if (!location || Array.from(location).length > 200 || !reason || Array.from(reason).length > 400) {
-      setImpoundError("Enter a location (up to 200 characters) and reason (up to 400 characters).");
+    if (!location || Array.from(location).length > 200) {
+      setImpoundError("Enter the location where the animal was found, up to 200 characters.");
       return;
     }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(impoundDate) || impoundDate < "0001-01-01" || Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== impoundDate || impoundDate > getPhilippineDateKey()) {
+    if (!isValidDateThroughToday(impoundDate)) {
       setImpoundError("Enter a valid impound date that is not in the future (Philippine time).");
       return;
     }
@@ -243,11 +275,10 @@ export function ScannerScreen({ pets, reviewIds, onRecord, onFlagScan, onImpound
     setImpoundSubmitting(true);
     setImpoundError(null);
     try {
-      if (await onImpound(pet, location, impoundDate, reason)) {
+      if (await onImpound(pet, location, impoundDate)) {
         setImpoundOpen(false);
         setImpoundLocation("");
-        setImpoundReason("");
-        toast.success("Impound report submitted.", { description: "Pending admin review. No automated SMS or email was sent." });
+        toast.success("Impound report submitted.");
       }
     } catch (error) {
       setImpoundError(error && typeof error === "object" && "message" in error && typeof error.message === "string" ? error.message : "Unable to submit the impound report. Try again.");
@@ -279,12 +310,25 @@ export function ScannerScreen({ pets, reviewIds, onRecord, onFlagScan, onImpound
 
       <div className="mt-4 px-5">
         {phase === "result" && pet ? (
-          <fieldset disabled={flagging}>
+          <fieldset disabled={savingFollowUp}>
             <PetRecord
               pet={pet}
               mode="scan"
               onBack={reset}
-              onFlag={handleFlag}
+              onRequestFollowUp={(type) => {
+                if (type === "vaccination") {
+                  setVaccineName("");
+                  setVaccineError(null);
+                  setLastVaccinationDate("");
+                  setVaccinationDateError(null);
+                  setVaccinationOpen(true);
+                } else {
+                  void handleFollowUp({ type: "registration" });
+                }
+              }}
+              requestedFollowUps={openFollowUps
+                .filter((request) => request.pet_record_id === pet.recordId)
+                .map((request) => request.request_type)}
               onLogImpound={() => {
                 setImpoundLocation(pet.barangay);
                 setImpoundDate(getPhilippineDateKey());
@@ -292,9 +336,8 @@ export function ScannerScreen({ pets, reviewIds, onRecord, onFlagScan, onImpound
                 setImpoundOpen(true);
               }}
               onScanAnother={reset}
-              flagged={flagged || reviewIds.includes(pet.id)}
             />
-            {flagging ? <p role="status" className="mt-2 text-xs text-muted-foreground">Saving review flag...</p> : null}
+            {savingFollowUp ? <p role="status" className="mt-2 text-xs text-muted-foreground">Saving request...</p> : null}
           </fieldset>
         ) : (
           <div className="space-y-3">
@@ -409,6 +452,61 @@ export function ScannerScreen({ pets, reviewIds, onRecord, onFlagScan, onImpound
         )}
       </div>
 
+      <Dialog open={vaccinationOpen} onOpenChange={(open) => { if (!savingFollowUpRef.current) setVaccinationOpen(open); }}>
+        <DialogContent className="max-h-[90dvh] w-[calc(100%-2rem)] max-w-[440px] overflow-y-auto rounded-xl border-border bg-card">
+          <DialogHeader>
+            <DialogTitle>For Vaccination</DialogTitle>
+            <DialogDescription>{pet?.name}</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={submitVaccination} className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="vaccine-name">Vaccine name</Label>
+              <Input
+                id="vaccine-name"
+                value={vaccineName}
+                onChange={(event) => {
+                  setVaccineName(event.target.value);
+                  setVaccineError(null);
+                }}
+                required
+                maxLength={MAX_VACCINE_NAME_LENGTH}
+                disabled={savingFollowUp}
+                aria-invalid={vaccineError ? true : undefined}
+                aria-describedby={vaccineError ? "vaccine-name-error" : undefined}
+                placeholder="Type the vaccine name"
+              />
+              {vaccineError ? <p id="vaccine-name-error" role="alert" className="text-xs text-destructive">{vaccineError}</p> : null}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="last-vaccination-date">
+                Last vaccination date <span className="font-normal text-muted-foreground">(optional)</span>
+              </Label>
+              <Input
+                id="last-vaccination-date"
+                type="date"
+                value={lastVaccinationDate}
+                onChange={(event) => {
+                  setLastVaccinationDate(event.target.value);
+                  setVaccinationDateError(null);
+                }}
+                min={MIN_CALENDAR_DATE}
+                max={getPhilippineDateKey()}
+                disabled={savingFollowUp}
+                aria-invalid={vaccinationDateError ? true : undefined}
+                aria-describedby={vaccinationDateError ? "last-vaccination-date-error" : undefined}
+              />
+              {vaccinationDateError ? (
+                <p id="last-vaccination-date-error" role="alert" className="text-xs text-destructive">{vaccinationDateError}</p>
+              ) : null}
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" disabled={savingFollowUp} onClick={() => setVaccinationOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={savingFollowUp}>{savingFollowUp ? "Saving..." : "Save request"}</Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={impoundOpen} onOpenChange={(open) => { if (!impoundSubmittingRef.current) setImpoundOpen(open); }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto rounded-xl border-border bg-card sm:max-w-[440px]">
           <DialogHeader>
@@ -425,14 +523,7 @@ export function ScannerScreen({ pets, reviewIds, onRecord, onFlagScan, onImpound
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="impound-date">Date impounded</Label>
-                <Input id="impound-date" type="date" value={impoundDate} onChange={(event) => setImpoundDate(event.target.value)} required min="0001-01-01" max={getPhilippineDateKey()} disabled={impoundSubmitting} />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="impound-reason">Reason / field notes</Label>
-                <Textarea id="impound-reason" value={impoundReason} onChange={(event) => setImpoundReason(event.target.value)} required maxLength={400} disabled={impoundSubmitting} placeholder="Why was the animal brought to the pound?" />
-              </div>
-              <div className="rounded-lg border border-warning/25 bg-warning/10 p-2.5 text-[9.5px] leading-relaxed text-muted-foreground">
-                This report will be pending admin review. No automated SMS or email is sent.
+                <Input id="impound-date" type="date" value={impoundDate} onChange={(event) => setImpoundDate(event.target.value)} required min={MIN_CALENDAR_DATE} max={getPhilippineDateKey()} disabled={impoundSubmitting} />
               </div>
               {impoundError ? <p role="alert" className="text-xs text-destructive">{impoundError}</p> : null}
               <div className="flex justify-end gap-2">

@@ -1,9 +1,11 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { BarChart3, Bell, CalendarDays, CheckCheck, ChevronDown, Dog, FileText, Heart, IdCard, LayoutDashboard, ListChecks, LogOut, Menu, PawPrint, Settings, ShieldCheck, UserCog, Users, Settings2 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Brand } from "@/components/veticare/brand";
+import { NotificationDetail } from "@/components/veticare/notification-detail";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -14,7 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { BarangaySelect } from "@/components/owner-app/barangay-select";
-import { navSections } from "@/data/veticare";
+import { navSections, sidebarCountKeys } from "@/data/veticare";
 import { signOut, useAuth } from "@/integrations/supabase/auth-context";
 import { supabase } from "@/integrations/supabase/client";
 import { PHILIPPINE_TIME_ZONE } from "@/lib/philippine-date";
@@ -38,10 +40,14 @@ type HeaderNotification = {
   created_at: string;
   read_at: string | null;
 };
+type SidebarCounts = Partial<Record<(typeof navSections)[number]["items"][number]["id"], number | null>>;
+
 function NavList({
-  onNavigate
+  onNavigate,
+  counts,
 }: {
   onNavigate?: () => void;
+  counts: SidebarCounts;
 }) {
   const {
     pathname
@@ -55,7 +61,8 @@ function NavList({
             {section.items.map(item => {
           const Icon = icons[item.icon as keyof typeof icons];
           const isActive = "to" in item && item.to === pathname;
-          const badge = "badge" in item ? item.badge : undefined;
+          const badge = counts[item.id];
+          const showBadge = badge != null && badge > 0;
           if (!("to" in item) || !item.to) {
             return <li key={item.id}>
                     <Tooltip>
@@ -63,7 +70,7 @@ function NavList({
                         <button type="button" aria-disabled="true" className="group flex w-full cursor-not-allowed items-center gap-3 rounded-xl px-3 py-2 text-left text-[13.5px] font-medium text-muted-foreground/75 transition-colors hover:bg-secondary/60">
                           <Icon className="size-[18px] shrink-0" strokeWidth={1.9} />
                           <span className="flex-1 truncate">{item.label}</span>
-                          {badge ? <span className="num rounded-md bg-secondary px-1.5 py-0.5 text-[10.5px] font-bold text-muted-foreground">
+                          {showBadge ? <span className="num rounded-md bg-secondary px-1.5 py-0.5 text-[10.5px] font-bold text-muted-foreground">
                               {badge}
                             </span> : null}
                         </button>
@@ -78,7 +85,7 @@ function NavList({
                   <Link to={item.to} onClick={onNavigate} aria-current={isActive ? "page" : undefined} className={cn("group flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-[13.5px] font-semibold transition-all", isActive ? "bg-primary text-primary-foreground shadow-glow" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground")}>
                     <Icon className={cn("size-[18px] shrink-0", isActive && "text-primary-foreground")} strokeWidth={isActive ? 2.2 : 1.9} />
                     <span className="flex-1 truncate">{item.label}</span>
-                    {badge ? <span className={cn("num rounded-md px-1.5 py-0.5 text-[10px] font-bold", isActive ? "bg-primary-foreground/15 text-primary-foreground" : "bg-secondary text-muted-foreground")}>
+                    {showBadge ? <span className={cn("num rounded-md px-1.5 py-0.5 text-[10px] font-bold", isActive ? "bg-primary-foreground/15 text-primary-foreground" : "bg-secondary text-muted-foreground")}>
                         {badge}
                       </span> : null}
                   </Link>
@@ -107,10 +114,12 @@ function SidebarBody({
   onNavigate,
   name,
   role,
+  counts,
 }: {
   onNavigate?: () => void;
   name: string;
   role: string;
+  counts: SidebarCounts;
 }) {
   return <div className="flex h-full flex-col bg-sidebar">
       <div className="px-5 pb-5 pt-6">
@@ -118,7 +127,7 @@ function SidebarBody({
         
       </div>
       <div className="scroll-slim min-h-0 flex-1 overflow-y-auto pb-4">
-        <NavList onNavigate={onNavigate} />
+        <NavList onNavigate={onNavigate} counts={counts} />
       </div>
       <SidebarFooter name={name} role={role} />
     </div>;
@@ -175,6 +184,37 @@ export function AppShell({
 }) {
   const navigate = useNavigate();
   const { session, role } = useAuth();
+  const adminId = role === "admin" ? session?.user.id : undefined;
+  const pendingRegistrations = useQuery({
+    queryKey: [...sidebarCountKeys.registrations, adminId],
+    enabled: Boolean(adminId),
+    refetchInterval: 60_000,
+    queryFn: async ({ signal }) => {
+      const { count, error } = await supabase.from("pets")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "pending")
+        .abortSignal(signal);
+      if (error) throw error;
+      return count;
+    },
+  });
+  const currentImpounds = useQuery({
+    queryKey: [...sidebarCountKeys.impounded, adminId],
+    enabled: Boolean(adminId),
+    refetchInterval: 60_000,
+    queryFn: async ({ signal }) => {
+      const { count, error } = await supabase.from("impounds")
+        .select("id", { count: "exact", head: true })
+        .eq("impound_status", "impounded")
+        .abortSignal(signal);
+      if (error) throw error;
+      return count;
+    },
+  });
+  const sidebarCounts = {
+    registrations: pendingRegistrations.isError ? null : pendingRegistrations.data,
+    impounded: currentImpounds.isError ? null : currentImpounds.data,
+  };
   const {
     pathname
   } = useLocation();
@@ -311,7 +351,7 @@ export function AppShell({
   };
   return <div className="min-h-screen bg-background">
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-[296px] border-r border-sidebar-border bg-sidebar lg:block">
-        <SidebarBody name={displayName} role={roleLabel} />
+        <SidebarBody name={displayName} role={roleLabel} counts={sidebarCounts} />
       </aside>
 
       <div className="lg:pl-[296px]">
@@ -328,7 +368,7 @@ export function AppShell({
                   <SheetTitle>Veticare navigation</SheetTitle>
                   <SheetDescription>Admin dashboard sections</SheetDescription>
                 </SheetHeader>
-                <SidebarBody onNavigate={() => setMobileOpen(false)} name={displayName} role={roleLabel} />
+                <SidebarBody onNavigate={() => setMobileOpen(false)} name={displayName} role={roleLabel} counts={sidebarCounts} />
               </SheetContent>
             </Sheet>
 
@@ -436,14 +476,13 @@ export function AppShell({
       </div>
 
       <Dialog open={Boolean(selectedNotification)} onOpenChange={(open) => { if (!open) setSelectedNotification(null); }}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-xl border-border bg-card sm:max-w-[440px]">
-          <DialogHeader>
-            <DialogTitle className="break-words pr-6">{selectedNotification?.title}</DialogTitle>
-            <DialogDescription>
-              {selectedNotification ? new Date(selectedNotification.created_at).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short", timeZone: PHILIPPINE_TIME_ZONE }) : ""}
-            </DialogDescription>
-          </DialogHeader>
-          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">{selectedNotification?.message}</p>
+        <DialogContent className="max-h-[min(85dvh,600px)] w-[calc(100%-2rem)] max-w-[440px] overflow-y-auto rounded-2xl border-border bg-card p-5 pt-10 shadow-raised sm:rounded-2xl">
+          {selectedNotification ? (
+            <NotificationDetail
+              notification={selectedNotification}
+              formattedDate={new Date(selectedNotification.created_at).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short", timeZone: PHILIPPINE_TIME_ZONE })}
+            />
+          ) : null}
         </DialogContent>
       </Dialog>
 

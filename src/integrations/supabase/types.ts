@@ -3361,9 +3361,9 @@ export type Database = {
   public: {
     Tables: {
       personnel_impound_reports: {
-        Row: { id: string; pet_record_id: string; reported_by: string; location_found: string; date_impounded: string; reason: string; status: string; created_at: string; reviewed_at: string | null; reviewed_by: string | null }
-        Insert: { id?: string; pet_record_id: string; reported_by?: string; location_found: string; date_impounded: string; reason: string; status?: string; created_at?: string; reviewed_at?: string | null; reviewed_by?: string | null }
-        Update: { id?: string; pet_record_id?: string; reported_by?: string; location_found?: string; date_impounded?: string; reason?: string; status?: string; created_at?: string; reviewed_at?: string | null; reviewed_by?: string | null }
+        Row: { id: string; pet_record_id: string; reported_by: string; location_found: string; date_impounded: string; reason: string | null; status: string; created_at: string; reviewed_at: string | null; reviewed_by: string | null }
+        Insert: { id?: string; pet_record_id: string; reported_by?: string; location_found: string; date_impounded: string; reason?: string | null; status?: string; created_at?: string; reviewed_at?: string | null; reviewed_by?: string | null }
+        Update: { id?: string; pet_record_id?: string; reported_by?: string; location_found?: string; date_impounded?: string; reason?: string | null; status?: string; created_at?: string; reviewed_at?: string | null; reviewed_by?: string | null }
         Relationships: [
           { foreignKeyName: "personnel_impound_reports_pet_record_id_fkey"; columns: ["pet_record_id"]; referencedRelation: "pets"; referencedColumns: ["id"] },
           { foreignKeyName: "personnel_impound_reports_reported_by_fkey"; columns: ["reported_by"]; referencedRelation: "profiles"; referencedColumns: ["id"] },
@@ -3389,9 +3389,9 @@ export type Database = {
         ]
       }
       personnel_review_flags: {
-        Row: { id: string; pet_record_id: string; reported_by: string; scan_id: string | null; status: string; created_at: string; resolved_at: string | null; resolved_by: string | null }
-        Insert: { id?: string; pet_record_id: string; reported_by?: string; scan_id?: string | null; status?: string; created_at?: string; resolved_at?: string | null; resolved_by?: string | null }
-        Update: { id?: string; pet_record_id?: string; reported_by?: string; scan_id?: string | null; status?: string; created_at?: string; resolved_at?: string | null; resolved_by?: string | null }
+        Row: { id: string; pet_record_id: string; reported_by: string; scan_id: string | null; status: string; request_type: "general" | "vaccination" | "registration"; vaccine_name: string | null; last_vaccination_date: string | null; created_at: string; resolved_at: string | null; resolved_by: string | null }
+        Insert: { id?: string; pet_record_id: string; reported_by?: string; scan_id?: string | null; status?: string; request_type?: "general" | "vaccination" | "registration"; vaccine_name?: string | null; last_vaccination_date?: string | null; created_at?: string; resolved_at?: string | null; resolved_by?: string | null }
+        Update: { id?: string; pet_record_id?: string; reported_by?: string; scan_id?: string | null; status?: string; request_type?: "general" | "vaccination" | "registration"; vaccine_name?: string | null; last_vaccination_date?: string | null; created_at?: string; resolved_at?: string | null; resolved_by?: string | null }
         Relationships: [
           { foreignKeyName: "personnel_review_flags_pet_record_id_fkey"; columns: ["pet_record_id"]; referencedRelation: "pets"; referencedColumns: ["id"] },
           { foreignKeyName: "personnel_review_flags_reported_by_fkey"; columns: ["reported_by"]; referencedRelation: "profiles"; referencedColumns: ["id"] },
@@ -3801,6 +3801,10 @@ export type Database = {
       get_admin_dashboard_data: {
         Args: Record<PropertyKey, never>
         Returns: Json
+      }
+      resolve_personnel_review_flag: {
+        Args: { p_flag_id: string }
+        Returns: boolean
       }
     }
     Enums: {

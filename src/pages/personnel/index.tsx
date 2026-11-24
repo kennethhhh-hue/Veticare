@@ -13,7 +13,10 @@ import type { Tables } from "@/integrations/supabase/types";
 import { getPhilippineDateKey } from "@/lib/philippine-date";
 import type { OwnerNotification } from "@/pages/owner-app/notifications-screen";
 import {
+  scanFollowUpLabels,
   type PersonnelPet,
+  type ScanFollowUp,
+  type ScanFollowUpRequest,
   type ScanEntry,
   type ScanResult,
 } from "@/data/personnel";
@@ -23,10 +26,23 @@ export type PersonnelImpoundReport = Tables<"personnel_impound_reports"> & {
   pets: { id: string; name: string; pet_id: string | null } | null;
 };
 
-const activityErrorMessage = (error: { message: string; code?: string }) =>
-  error.code === "42P01" || error.code === "PGRST205" || /personnel_(scans|verifications|review_flags).*schema cache/i.test(error.message)
-    ? "Personnel activity tables are unavailable. Apply the personnel activity migration and refresh the page."
-    : `Personnel activity failed: ${error.message}`;
+type ReviewFlag = Pick<Tables<"personnel_review_flags">, "pet_record_id" | "request_type">;
+
+const activityErrorMessage = (error: { message: string; code?: string }) => {
+  if (error.code === "PGRST204" && error.message.includes("last_vaccination_date")) {
+    return "Vaccination dates are unavailable. Apply the personnel last vaccination date migration and refresh the page.";
+  }
+  if (error.code === "PGRST204" && error.message.includes("vaccine_name")) {
+    return "Vaccine names are unavailable. Apply the personnel scan form fields migration and refresh the page.";
+  }
+  if (error.code === "PGRST204" && error.message.includes("request_type")) {
+    return "Follow-up requests are unavailable. Apply the personnel scan follow-ups migration and refresh the page.";
+  }
+  if (error.code === "42P01" || error.code === "PGRST205" || /personnel_(scans|verifications|review_flags).*schema cache/i.test(error.message)) {
+    return "Personnel activity tables are unavailable. Apply the personnel activity migration and refresh the page.";
+  }
+  return `Personnel activity failed: ${error.message}`;
+};
 
 const formatScanTime = (timestamp: string) => new Date(timestamp).toLocaleString("en-PH", {
   dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Manila",
@@ -65,7 +81,7 @@ const PersonnelApp = () => {
   const [scans, setScans] = useState<ScanEntry[]>([]);
   const [scanRegistry, setScanRegistry] = useState<PersonnelPet[]>([]);
   const [verifications, setVerifications] = useState<Tables<"personnel_verifications">[]>([]);
-  const [reviewRecordIds, setReviewRecordIds] = useState<string[]>([]);
+  const [reviewFlags, setReviewFlags] = useState<ReviewFlag[]>([]);
   const [activityError, setActivityError] = useState<string | null>(null);
   const [activityReady, setActivityReady] = useState(false);
   const activityUserId = useRef<string | null>(null);
@@ -136,7 +152,7 @@ const PersonnelApp = () => {
       const [scanResponse, verificationResponse, flagResponse, profileResponse] = await Promise.all([
         supabase.from("personnel_scans").select("*, pets(pet_id, name)").eq("scanned_by", user.id).order("created_at", { ascending: false }),
         supabase.from("personnel_verifications").select("*").eq("verified_by", user.id).order("created_at", { ascending: false }),
-        supabase.from("personnel_review_flags").select("pet_record_id").eq("status", "open"),
+        supabase.from("personnel_review_flags").select("*").eq("status", "open"),
         supabase.from("profiles").select("full_name, email").eq("id", user.id).maybeSingle(),
       ]);
       if (!active || version !== activityVersion.current) return;
@@ -150,7 +166,9 @@ const PersonnelApp = () => {
       activityOfficer.current = officer;
       setScans((scanResponse.data ?? []).map((row) => mapScan(row, row.pets, officer)));
       setVerifications(verificationResponse.data ?? []);
-      setReviewRecordIds((flagResponse.data ?? []).map((row) => row.pet_record_id));
+      setReviewFlags((flagResponse.data ?? []).map(({ pet_record_id, request_type }) => ({
+        pet_record_id, request_type: request_type ?? "general",
+      })));
       setActivityError(null);
       setActivityReady(true);
     };
@@ -242,8 +260,11 @@ const PersonnelApp = () => {
       }
 
       const profilesById = new Map((profiles ?? []).map((profile) => [profile.id, profile]));
+      const currentDate = getPhilippineDateKey();
       const issuedPets: PersonnelPet[] = (petRows ?? []).map((pet) => {
         const ownerProfile = profilesById.get(pet.owner_id);
+        const expired = pet.pet_id_status === "expired" ||
+          (pet.pet_id_valid_through != null && pet.pet_id_valid_through < currentDate);
         return {
           id: pet.pet_id ?? pet.id,
           recordId: pet.id,
@@ -256,7 +277,7 @@ const PersonnelApp = () => {
           owner: ownerProfile?.full_name || "Pet owner",
           contact: ownerProfile?.phone || "—",
           barangay: ownerProfile?.barangay || "—",
-          registration: "active",
+          registration: expired ? "expired" : "active",
           registeredOn: new Date(pet.created_at).toLocaleDateString(undefined, { month: "short", year: "numeric" }),
           validThrough: pet.pet_id_valid_through
             ? new Date(`${pet.pet_id_valid_through}T12:00:00+08:00`).toLocaleDateString("en-PH", { dateStyle: "medium", timeZone: "Asia/Manila" })
@@ -317,7 +338,12 @@ const PersonnelApp = () => {
     return data.id;
   };
 
-  const flagPet = async (petId: string, scanId?: string): Promise<boolean> => {
+  const flagPet = async (
+    petId: string,
+    scanId?: string,
+    request: ScanFollowUpRequest | { type: "general" } = { type: "general" },
+  ): Promise<boolean> => {
+    const requestType = request.type;
     const pet = scanRegistry.find((item) => item.id === petId);
     if (!activityReady || !pet) {
       toast.error(activityError || "Personnel activity or pet record is unavailable.");
@@ -325,16 +351,30 @@ const PersonnelApp = () => {
     }
     const scan = scanId ? scans.find((item) => item.id === scanId && item.petRecordId === pet.recordId) : undefined;
     if (scanId && !scan) { toast.error("The scan does not match this pet."); return false; }
+    const recordOpenFlag = () => {
+      activityVersion.current++;
+      setActivityError(null);
+      setReviewFlags((current) => current.some((flag) => flag.pet_record_id === pet.recordId && flag.request_type === requestType)
+        ? current
+        : [...current, { pet_record_id: pet.recordId, request_type: requestType }]);
+    };
     const { error } = await supabase.from("personnel_review_flags")
-      .insert({ pet_record_id: pet.recordId, ...(scan ? { scan_id: scan.id } : {}) });
+      .insert({
+        pet_record_id: pet.recordId,
+        scan_id: scan?.id,
+        request_type: requestType === "general" ? undefined : requestType,
+        vaccine_name: request.type === "vaccination" ? request.vaccineName : undefined,
+        last_vaccination_date: request.type === "vaccination" ? request.lastVaccinationDate ?? undefined : undefined,
+      });
     if (error) {
       if (error.code === "23505") {
         const { data: existing, error: lookupError } = await supabase.from("personnel_review_flags")
-          .select("id").eq("pet_record_id", pet.recordId).eq("status", "open").maybeSingle();
-        if (!lookupError && existing) {
-          activityVersion.current++;
-          setReviewRecordIds((current) => [...new Set([...current, pet.recordId])]);
-          toast.info("This pet already has an open review flag.");
+          .select("*").eq("pet_record_id", pet.recordId).eq("status", "open");
+        if (existing?.some((flag) => (flag.request_type ?? "general") === requestType)) {
+          recordOpenFlag();
+          toast.info(requestType === "general"
+            ? "This pet already has an open review flag."
+            : `${scanFollowUpLabels[requestType]} request already recorded.`);
           return false;
         }
         if (lookupError) { reportActivityError(lookupError); return false; }
@@ -342,9 +382,7 @@ const PersonnelApp = () => {
       reportActivityError(error);
       return false;
     }
-    activityVersion.current++;
-    setActivityError(null);
-    setReviewRecordIds((current) => [...new Set([...current, pet.recordId])]);
+    recordOpenFlag();
     return true;
   };
 
@@ -366,7 +404,7 @@ const PersonnelApp = () => {
   const verifiedIds = scanRegistry.filter((pet) => verifications.some((verification) =>
     verification.pet_record_id === pet.recordId && getPhilippineDateKey(new Date(verification.created_at)) === today,
   )).map((pet) => pet.id);
-  const reviewIds = scanRegistry.filter((pet) => reviewRecordIds.includes(pet.recordId)).map((pet) => pet.id);
+  const reviewIds = scanRegistry.filter((pet) => reviewFlags.some((flag) => flag.pet_record_id === pet.recordId)).map((pet) => pet.id);
 
   return (
     <div className="mobile-app-viewport relative flex flex-col items-center justify-center bg-background sm:px-6 sm:py-6">
@@ -388,7 +426,7 @@ const PersonnelApp = () => {
                 <HomeScreen
                   scans={scans}
                   verifiedCount={verifiedIds.length}
-                  reviewCount={reviewRecordIds.length}
+                  reviewCount={reviewFlags.length}
                   activityReady={activityReady}
                   today={today}
                   impoundReports={impoundReports}
@@ -406,15 +444,17 @@ const PersonnelApp = () => {
                 <ScannerScreen
                   pets={scanRegistry}
                   onRecord={(pet, result, note) => withActivityLock<string | null>("scan", null, () => addScan(pet, result, note))}
-                  reviewIds={reviewIds}
-                  onFlagScan={(scanId, petId) => withActivityLock(`flag:${petId}`, false, () => flagPet(petId, scanId))}
-                  onImpound={(pet, location, date, reason) => withActivityLock("impound", false, async () => {
+                  openFollowUps={reviewFlags.filter((flag): flag is { pet_record_id: string; request_type: ScanFollowUp } => flag.request_type !== "general")}
+                  onRequestFollowUp={(scanId, petId, request) => withActivityLock(`flag:${petId}:${request.type}`, false, () => flagPet(petId, scanId, request))}
+                  onImpound={(pet, location, date) => withActivityLock("impound", false, async () => {
                     const { error } = await supabase.from("personnel_impound_reports").insert({
                       pet_record_id: pet.recordId,
                       location_found: location,
                       date_impounded: date,
-                      reason,
                     });
+                    if (error?.code === "23502" && error.message.includes('"reason"')) {
+                      throw new Error("Apply the personnel scan form fields migration to submit an impound report without notes.");
+                    }
                     if (error) throw error;
                     void loadImpoundReports();
                     return true;
@@ -438,7 +478,7 @@ const PersonnelApp = () => {
                 />
               ) : null}
             </PullToRefresh>
-            <nav className="relative shrink-0 border-t border-border bg-card/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl">
+            <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl sm:relative sm:inset-auto sm:z-auto sm:shrink-0">
               <div className="flex items-end justify-around gap-1">
                 {leftTabs.map((item) => {
                   const Icon = item.icon;

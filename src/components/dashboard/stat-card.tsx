@@ -63,7 +63,7 @@ export function StatCard({ kpi, index = 0, onClick, loading = false }: StatCardP
         >
           <Icon className="size-[19px]" strokeWidth={2.1} />
         </span>
-        {!loading ? <span
+        {!loading && kpi.delta !== 0 ? <span
           className={cn(
             "flex items-center gap-0.5 rounded-full px-2 py-1 text-[11px] font-bold",
             improving

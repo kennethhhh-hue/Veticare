@@ -327,6 +327,11 @@ export const quickActions = [
   { id: "pet-id", label: "Generate Pet ID", icon: "id" },
 ] as const;
 
+export const sidebarCountKeys = {
+  registrations: ["admin-sidebar-count", "registrations"],
+  impounded: ["admin-sidebar-count", "impounded"],
+} as const;
+
 export const navSections = [
   {
     label: "Overview",
@@ -339,9 +344,9 @@ export const navSections = [
   {
     label: "Operations",
     items: [
-      { id: "registrations", label: "Pet Registrations", icon: "file", to: "/registrations", badge: 4 },
+      { id: "registrations", label: "Pet Registrations", icon: "file", to: "/registrations" },
       { id: "owners", label: "Owners", icon: "users", to: "/owners" },
-      { id: "impounded", label: "Impounded Animals", icon: "dog", to: "/impounded-dogs", badge: 18 },
+      { id: "impounded", label: "Impounded Animals", icon: "dog", to: "/impounded-dogs" },
       { id: "adoptions", label: "Adoptions", icon: "heart", to: "/adoptions" },
       { id: "pet-id", label: "Pet ID", icon: "id", to: "/pet-id" },
     ],

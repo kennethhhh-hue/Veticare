@@ -2,6 +2,7 @@ import {
   ArrowLeft,
   BadgeCheck,
   BellRing,
+  ClipboardList,
   Flag,
   MapPin,
   Phone,
@@ -15,9 +16,11 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   registrationLabels,
+  scanFollowUpLabels,
   vaccinationLabels,
   type PersonnelPet,
   type RegistrationState,
+  type ScanFollowUp,
   type VaccinationState,
 } from "@/data/personnel";
 
@@ -41,6 +44,8 @@ interface PetRecordProps {
   onBack?: () => void;
   onVerify?: () => void;
   onFlag?: () => void;
+  onRequestFollowUp?: (type: ScanFollowUp) => void;
+  requestedFollowUps?: ScanFollowUp[];
   onScanAnother?: () => void;
   onLogImpound?: () => void;
   verified?: boolean;
@@ -53,6 +58,8 @@ export function PetRecord({
   onBack,
   onVerify,
   onFlag,
+  onRequestFollowUp,
+  requestedFollowUps = [],
   onScanAnother,
   onLogImpound,
   verified = false,
@@ -61,6 +68,8 @@ export function PetRecord({
   const registrationOk = pet.registration === "active" || pet.registration === "expiring";
   const vaccinationOk = pet.vaccination === "complete";
   const needsReview = !registrationOk || !vaccinationOk;
+  const vaccinationRequested = requestedFollowUps.includes("vaccination");
+  const registrationRequested = requestedFollowUps.includes("registration");
 
   return (
     <div className="space-y-3">
@@ -195,25 +204,27 @@ export function PetRecord({
         </div>
       </div>
 
-      <div
-        className={cn(
-          "flex items-start gap-2 rounded-xl border px-2.5 py-2",
-          needsReview
-            ? "border-warning/25 bg-warning/10"
-            : "border-success/20 bg-success/5",
-        )}
-      >
-        {needsReview ? (
-          <TriangleAlert className="mt-0.5 size-3.5 shrink-0 text-warning" />
-        ) : (
-          <BadgeCheck className="mt-0.5 size-3.5 shrink-0 text-success" />
-        )}
-        <p className="text-[9.5px] leading-relaxed text-muted-foreground">
-          {needsReview
-            ? `This pet needs attention: ${registrationLabels[pet.registration].toLowerCase()} registration and ${vaccinationLabels[pet.vaccination].toLowerCase()}. ${pet.vaccination !== "complete" ? `Last record: ${pet.lastVaccine}.` : ""}`
-            : `Registration and vaccination are current. ${pet.lastVaccine}.`}
-        </p>
-      </div>
+      {!onRequestFollowUp ? (
+        <div
+          className={cn(
+            "flex items-start gap-2 rounded-xl border px-2.5 py-2",
+            needsReview
+              ? "border-warning/25 bg-warning/10"
+              : "border-success/20 bg-success/5",
+          )}
+        >
+          {needsReview ? (
+            <TriangleAlert className="mt-0.5 size-3.5 shrink-0 text-warning" />
+          ) : (
+            <BadgeCheck className="mt-0.5 size-3.5 shrink-0 text-success" />
+          )}
+          <p className="text-[9.5px] leading-relaxed text-muted-foreground">
+            {needsReview
+              ? `This pet needs attention: ${registrationLabels[pet.registration].toLowerCase()} registration and ${vaccinationLabels[pet.vaccination].toLowerCase()}. ${pet.vaccination !== "complete" ? `Last record: ${pet.lastVaccine}.` : ""}`
+              : `Registration and vaccination are current. ${pet.lastVaccine}.`}
+          </p>
+        </div>
+      ) : null}
 
       <div className="flex flex-col gap-2">
         {mode === "scan" && onLogImpound && pet.owner !== "New Owner Draft" ? (
@@ -223,8 +234,32 @@ export function PetRecord({
             className="h-10 w-full rounded-xl border-warning/30 bg-warning/5 text-[11.5px] font-bold text-foreground"
           >
             <BellRing className="size-4 text-warning" />
-            Report impound
+            Report Impound
           </Button>
+        ) : null}
+        {onRequestFollowUp ? (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onRequestFollowUp("vaccination")}
+              disabled={vaccinationOk || vaccinationRequested}
+              className="h-10 w-full rounded-xl border-border text-[11.5px] font-semibold text-foreground/85 disabled:opacity-60"
+            >
+              <Syringe className="size-4 text-primary" />
+              {vaccinationOk ? "Vaccination Complete" : vaccinationRequested ? "Vaccination Requested" : scanFollowUpLabels.vaccination}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onRequestFollowUp("registration")}
+              disabled={registrationOk || registrationRequested}
+              className="h-10 w-full rounded-xl border-border text-[11.5px] font-semibold text-foreground/85 disabled:opacity-60"
+            >
+              <ClipboardList className="size-4 text-primary" />
+              {registrationOk ? "Already Registered" : registrationRequested ? "Registration Requested" : scanFollowUpLabels.registration}
+            </Button>
+          </>
         ) : null}
         {onVerify ? (
           <Button

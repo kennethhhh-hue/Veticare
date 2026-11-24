@@ -41,8 +41,12 @@ const toneMap: Record<Status, { dot: string; chip: string; label: string }> = {
   warning: { dot: "bg-warning", chip: "bg-warning/12 text-warning", label: "Warning" },
 };
 
-export function StatusPill({ status, className }: { status: Status; className?: string }) {
-  const tone = toneMap[status];
+export function StatusPill({ status, className }: { status: Status | string; className?: string }) {
+  const tone = toneMap[status as Status] ?? {
+    dot: "bg-muted-foreground",
+    chip: "bg-secondary text-muted-foreground",
+    label: status ? status.replace(/[_-]+/g, " ").replace(/\b\w/g, (part) => part.toUpperCase()) : "Unknown",
+  };
   return (
     <span
       className={cn(
