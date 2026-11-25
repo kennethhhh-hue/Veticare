@@ -329,6 +329,11 @@ const OwnerApp = () => {
                   pet={pets.find((pet) => pet.id === openPet.id) ?? openPet}
                   onBack={() => setOpenPet(null)}
                   onShowId={(pet) => setIdPet(pet)}
+                  onPhotoUpdated={(petId, photoUrl) => {
+                    setPets((current) => current.map((pet) => pet.id === petId ? { ...pet, photoUrl } : pet));
+                    setOpenPet((current) => current?.id === petId ? { ...current, photoUrl } : current);
+                    setIdPet((current) => current?.id === petId ? { ...current, photoUrl } : current);
+                  }}
                   onRequest={submitOwnerRequest}
                 />
               ) : (
@@ -338,6 +343,7 @@ const OwnerApp = () => {
                       onOpenTab={selectTab}
                       pets={pets}
                       ownerName={profile.fullName}
+                      ownerPhotoUrl={profile.avatarUrl}
                       onAddPet={() => setRegisteringPet(true)}
                       onOpenPet={(pet) => setOpenPet(pet)}
                       onOpenId={(pet) => setIdPet(pet)}
@@ -393,6 +399,7 @@ const OwnerApp = () => {
                           .map((request) => ({ ...request, localOnly: true })),
                       ]}
                       requestsUnavailable={ownerRequestsUnavailable}
+                      onPhotoUpdated={(avatarUrl) => setProfile((current) => ({ ...current, avatarUrl }))}
                       onSave={async (nextProfile) => {
                         const { data: userData, error: userError } = await supabase.auth.getUser();
                         if (userError || !userData.user) {

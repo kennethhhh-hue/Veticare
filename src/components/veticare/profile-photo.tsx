@@ -7,7 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 interface ProfilePhotoProps {
   name: string;
   photoUrl?: string;
-  onPhotoUpdated: (photoUrl: string) => void;
+  onPhotoUpdated?: (photoUrl: string) => void;
 }
 
 export function ProfilePhoto({ name, photoUrl, onPhotoUpdated }: ProfilePhotoProps) {
@@ -94,7 +94,7 @@ export function ProfilePhoto({ name, photoUrl, onPhotoUpdated }: ProfilePhotoPro
       return;
     }
 
-    onPhotoUpdated(url);
+    onPhotoUpdated?.(url);
     setUploading(false);
     setUploadProgress(0);
     toast.success("Profile photo updated.");

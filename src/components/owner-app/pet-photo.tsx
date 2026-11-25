@@ -10,8 +10,8 @@ interface PetPhotoProps {
 }
 
 export function PetPhoto({ src, alt, species, className }: PetPhotoProps) {
-  const [failed, setFailed] = useState(false);
-  const showImage = Boolean(src) && !failed;
+  const [failedSrc, setFailedSrc] = useState<string>();
+  const showImage = Boolean(src) && src !== failedSrc;
 
   return (
     <div className={cn("relative overflow-hidden bg-secondary", className)}>
@@ -21,7 +21,7 @@ export function PetPhoto({ src, alt, species, className }: PetPhotoProps) {
           alt={alt}
           crossOrigin="anonymous"
           loading="lazy"
-          onError={() => setFailed(true)}
+          onError={() => setFailedSrc(src)}
           className="size-full object-cover"
         />
       ) : (

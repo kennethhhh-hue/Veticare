@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { PetPhoto } from "@/components/owner-app/pet-photo";
+import { AccountAvatar } from "@/components/veticare/account-avatar";
 import { type AdoptablePet, type OwnerPet } from "@/data/owner-app";
 import type { AppTab } from "@/pages/owner-app/app-tab";
 import { PHILIPPINE_TIME_ZONE } from "@/lib/philippine-date";
@@ -19,6 +20,7 @@ interface HomeScreenProps {
   onOpenTab: (tab: AppTab) => void;
   pets: OwnerPet[];
   ownerName: string;
+  ownerPhotoUrl?: string;
   onAddPet: () => void;
   onOpenPet: (pet: OwnerPet) => void;
   onOpenId: (pet: OwnerPet) => void;
@@ -37,6 +39,7 @@ export function HomeScreen({
   onOpenTab,
   pets,
   ownerName,
+  ownerPhotoUrl,
   onAddPet,
   onOpenPet,
   onOpenId,
@@ -96,9 +99,7 @@ export function HomeScreen({
   return (
     <div className="pb-6">
       <header className="flex items-center gap-3 px-5 pt-5">
-        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary text-[12px] font-bold text-primary-foreground">
-          {ownerName.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase()}
-        </span>
+        <AccountAvatar name={ownerName} photoUrl={ownerPhotoUrl} />
         <div className="min-w-0 flex-1">
           <p className="text-[9.5px] font-medium text-muted-foreground">{greeting} · {philippineDateTime} PHT</p>
           <p className="truncate text-[15px] font-extrabold tracking-[-0.02em] text-foreground">

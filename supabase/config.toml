@@ -5,3 +5,6 @@ verify_jwt = true
 
 [functions.owner-notification-email]
 verify_jwt = false
+
+[functions.owner-pet-photo]
+verify_jwt = true

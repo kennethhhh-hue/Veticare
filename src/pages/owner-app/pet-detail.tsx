@@ -1,30 +1,73 @@
-import { useRef, useState, type FormEvent } from "react";
+import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { FunctionsHttpError } from "@supabase/supabase-js";
 import {
   ArrowLeft,
   CalendarClock,
   IdCard,
+  Syringe,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PetPhoto } from "@/components/owner-app/pet-photo";
 import { Button } from "@/components/ui/button";
 import type { OwnerPet, OwnerRequestInput } from "@/data/owner-app";
-import { getPhilippineDateKey } from "@/lib/philippine-date";
+import { formatCalendarDate, getPhilippineDateKey } from "@/lib/philippine-date";
+import { usePetVaccinations } from "@/hooks/use-pet-vaccinations";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { supabase } from "@/integrations/supabase/client";
+
+const photoTypes = ["image/jpeg", "image/png", "image/webp"];
 
 interface PetDetailProps {
   pet: OwnerPet;
   onBack: () => void;
   onShowId: (pet: OwnerPet) => void;
+  onPhotoUpdated: (petId: string, photoUrl: string) => void;
   onRequest: (request: OwnerRequestInput) => Promise<boolean>;
 }
 
-export function PetDetail({ pet, onBack, onShowId, onRequest }: PetDetailProps) {
+export function PetDetail({ pet, onBack, onShowId, onPhotoUpdated, onRequest }: PetDetailProps) {
+  const { vaccinations } = usePetVaccinations(pet.id);
   const [visitOpen, setVisitOpen] = useState(false);
   const [visitDate, setVisitDate] = useState("");
   const requestLock = useRef(false);
   const [savingRequest, setSavingRequest] = useState(false);
+  const photoInput = useRef<HTMLInputElement>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
+  const changePhoto = async (event: ChangeEvent<HTMLInputElement>) => {
+    const photo = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (!photo || uploadingPhoto) return;
+    if (!photo.size || !photoTypes.includes(photo.type)) {
+      toast.error("Choose a JPG, PNG, or WebP image.");
+      return;
+    }
+    if (photo.size > 5 * 1024 * 1024) {
+      toast.error("The pet photo must be 5 MB or smaller.");
+      return;
+    }
+
+    const body = new FormData();
+    body.set("petId", pet.id);
+    body.set("photo", photo);
+    setUploadingPhoto(true);
+    try {
+      const { data, error } = await supabase.functions.invoke<{ photoUrl: string }>("owner-pet-photo", { body });
+      if (error) {
+        const details = error instanceof FunctionsHttpError ? await error.context.json().catch(() => null) : null;
+        throw new Error(typeof details?.error === "string" ? details.error : error.message);
+      }
+      if (!data?.photoUrl) throw new Error("The server did not confirm the photo update.");
+      onPhotoUpdated(pet.id, data.photoUrl);
+      toast.success(`${pet.name}'s photo updated.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to change the pet photo.");
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
 
   const submitVisitRequest = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -74,6 +117,17 @@ export function PetDetail({ pet, onBack, onShowId, onRequest }: PetDetailProps) 
         >
           <ArrowLeft className="size-4" />
         </button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => photoInput.current?.click()}
+          disabled={uploadingPhoto}
+          className="absolute right-4 top-4 h-9 rounded-full border-transparent bg-card/90 text-[11px] backdrop-blur hover:bg-card"
+        >
+          <span aria-hidden="true">📷</span>{uploadingPhoto ? "Uploading…" : "Change Photo"}
+        </Button>
+        <input ref={photoInput} type="file" accept={photoTypes.join(",")} onChange={(event) => void changePhoto(event)} hidden />
         <div className="absolute inset-x-5 bottom-4">
           <div className="flex flex-wrap items-center gap-1.5">
             {pet.tags.slice(0, 2).map((tag) => (
@@ -135,6 +189,27 @@ export function PetDetail({ pet, onBack, onShowId, onRequest }: PetDetailProps) 
             Book this visit
           </button>
         </div> : null}
+
+        <section aria-labelledby="pet-vaccination-history" className="mt-4 space-y-2 rounded-2xl border border-border bg-card p-3.5">
+          <h2 id="pet-vaccination-history" className="flex items-center gap-1.5 text-[12px] font-extrabold text-foreground">
+            <Syringe className="size-3.5 text-primary" aria-hidden="true" />
+            Vaccination history
+          </h2>
+          {vaccinations.isPending ? <p role="status" className="text-[10.5px] text-muted-foreground">Loading vaccination records…</p> : null}
+          {vaccinations.isError ? <p role="alert" className="text-[10.5px] text-destructive">Vaccination records are currently unavailable.</p> : null}
+          {vaccinations.data?.length ? (
+            <ul className="divide-y divide-border">
+              {vaccinations.data.map((record) => (
+                <li key={record.id} className="flex items-start justify-between gap-3 py-2 text-[11px]">
+                  <span className="min-w-0 break-words font-semibold text-foreground">{record.vaccine_name}</span>
+                  <time dateTime={record.administered_on} className="shrink-0 text-muted-foreground">{formatCalendarDate(record.administered_on)}</time>
+                </li>
+              ))}
+            </ul>
+          ) : vaccinations.isSuccess ? (
+            <p className="text-[10.5px] text-muted-foreground">No vaccinations recorded.</p>
+          ) : null}
+        </section>
 
         <Button
           onClick={() => onShowId(pet)}

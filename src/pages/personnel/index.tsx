@@ -446,6 +446,7 @@ const PersonnelApp = () => {
                   impoundReportsError={impoundReportsError}
                   onRefreshImpoundReports={loadImpoundReports}
                   personnelName={personnelIdentity.name}
+                  personnelPhotoUrl={personnelIdentity.avatarUrl}
                   notifications={notifications}
                   onMarkNotificationRead={markPersonnelNotificationRead}
                   onOpenScan={() => setTab("scan")}

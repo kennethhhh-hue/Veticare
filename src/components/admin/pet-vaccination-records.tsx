@@ -1,27 +1,19 @@
 import { useState, type FormEvent } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { usePetVaccinations } from "@/hooks/use-pet-vaccinations";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCalendarDate, getPhilippineDateKey } from "@/lib/philippine-date";
 
 export function PetVaccinationRecords({ petId }: { petId: string }) {
   const queryClient = useQueryClient();
-  const queryKey = ["pet-vaccinations", petId] as const;
+  const { vaccinations, queryKey } = usePetVaccinations(petId);
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState("");
   const [date, setDate] = useState(getPhilippineDateKey);
-  const vaccinations = useQuery({
-    queryKey,
-    queryFn: async () => {
-      const { data, error } = await supabase.from("pet_vaccinations").select("id, vaccine_name, administered_on")
-        .eq("pet_record_id", petId).order("administered_on", { ascending: false }).order("created_at", { ascending: false });
-      if (error) throw new Error(error.message);
-      return data;
-    },
-  });
   const save = useMutation({
     mutationFn: async () => {
       const vaccineName = name.trim();

@@ -30,6 +30,7 @@ export function ProfileScreen({
   requests,
   requestsUnavailable,
   onSave,
+  onPhotoUpdated,
 }: {
   profile: OwnerProfile;
   petCount: number;
@@ -37,6 +38,7 @@ export function ProfileScreen({
   requests: OwnerRequest[];
   requestsUnavailable?: boolean;
   onSave: (profile: OwnerProfile) => Promise<boolean>;
+  onPhotoUpdated: (avatarUrl: string) => void;
 }) {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState(() => localStorage.getItem("veticare-owner-reminders") !== "off");
@@ -63,9 +65,8 @@ export function ProfileScreen({
 
   const initials = profile.fullName.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase();
   const updatePhoto = (avatarUrl: string) => {
-    const updated = { ...profile, avatarUrl };
     setDraft((current) => ({ ...current, avatarUrl }));
-    onSave(updated);
+    onPhotoUpdated(avatarUrl);
   };
 
   return (

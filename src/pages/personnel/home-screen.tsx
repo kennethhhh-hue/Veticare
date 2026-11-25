@@ -19,6 +19,7 @@ import type { OwnerNotification } from "@/pages/owner-app/notifications-screen";
 import { getPhilippineDateKey } from "@/lib/philippine-date";
 import { cn } from "@/lib/utils";
 import { NotificationDetail } from "@/components/veticare/notification-detail";
+import { AccountAvatar } from "@/components/veticare/account-avatar";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
@@ -47,13 +48,14 @@ interface HomeScreenProps {
   impoundReportsError: string | null;
   onRefreshImpoundReports: () => void;
   personnelName: string;
+  personnelPhotoUrl?: string;
   notifications: OwnerNotification[];
   onMarkNotificationRead: (notification: OwnerNotification) => void;
   onOpenScan: () => void;
   onOpenHistory: () => void;
 }
 
-export function HomeScreen({ scans, verifiedCount, reviewCount, activityReady, today, impoundReports, impoundReportsLoading, impoundReportsError, onRefreshImpoundReports, personnelName, notifications, onMarkNotificationRead, onOpenScan, onOpenHistory }: HomeScreenProps) {
+export function HomeScreen({ scans, verifiedCount, reviewCount, activityReady, today, impoundReports, impoundReportsLoading, impoundReportsError, onRefreshImpoundReports, personnelName, personnelPhotoUrl, notifications, onMarkNotificationRead, onOpenScan, onOpenHistory }: HomeScreenProps) {
   const todaysScans = scans.filter((scan) => getPhilippineDateKey(new Date(scan.createdAt)) === today);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [selectedNotification, setSelectedNotification] = useState<OwnerNotification | null>(null);
@@ -69,9 +71,7 @@ export function HomeScreen({ scans, verifiedCount, reviewCount, activityReady, t
   return (
     <div className="pb-6">
       <header className="flex items-center gap-3 px-5 pt-5">
-        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary text-[12px] font-bold text-primary-foreground">
-          {(personnelName || "OCVAS Personnel").split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase()}
-        </span>
+        <AccountAvatar name={personnelName || "OCVAS Personnel"} photoUrl={personnelPhotoUrl} />
         <div className="min-w-0 flex-1">
           <p className="text-[10.5px] font-medium text-muted-foreground">Good morning</p>
           <p className="truncate text-[15px] font-extrabold tracking-[-0.02em] text-foreground">

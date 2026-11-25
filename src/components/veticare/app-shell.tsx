@@ -5,7 +5,9 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Brand } from "@/components/veticare/brand";
+import { AccountAvatar } from "@/components/veticare/account-avatar";
 import { NotificationDetail } from "@/components/veticare/notification-detail";
+import { ProfilePhoto } from "@/components/veticare/profile-photo";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -95,13 +97,10 @@ function NavList({
         </div>)}
     </nav>;
 }
-function SidebarFooter({ name, role }: { name: string; role: string }) {
-  const initials = name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase() || "VC";
+function SidebarFooter({ name, role, photoUrl }: { name: string; role: string; photoUrl?: string }) {
   return <div className="mt-auto px-3 pb-4">
       <div className="flex items-center gap-2.5 border-t border-sidebar-border px-2 pb-1 pt-4">
-        <div className="grid size-8 place-items-center rounded-lg bg-secondary text-[11px] font-bold text-secondary-foreground">
-          {initials}
-        </div>
+        <AccountAvatar name={name} photoUrl={photoUrl} className="size-8 rounded-lg bg-secondary text-[11px] text-secondary-foreground" />
         <div className="min-w-0 flex-1 leading-tight">
           <p className="truncate text-[12.5px] font-semibold text-foreground">{name}</p>
           <p className="truncate text-[10.5px] text-muted-foreground">{role}</p>
@@ -114,11 +113,13 @@ function SidebarBody({
   onNavigate,
   name,
   role,
+  photoUrl,
   counts,
 }: {
   onNavigate?: () => void;
   name: string;
   role: string;
+  photoUrl?: string;
   counts: SidebarCounts;
 }) {
   return <div className="flex h-full flex-col bg-sidebar">
@@ -129,7 +130,7 @@ function SidebarBody({
       <div className="scroll-slim min-h-0 flex-1 overflow-y-auto pb-4">
         <NavList onNavigate={onNavigate} counts={counts} />
       </div>
-      <SidebarFooter name={name} role={role} />
+      <SidebarFooter name={name} role={role} photoUrl={photoUrl} />
     </div>;
 }
 const pageCrumbs: Record<string, {
@@ -236,7 +237,8 @@ export function AppShell({
   const displayName = profile.name || String(session?.user.user_metadata.full_name ?? session?.user.email ?? "Veticare user");
   const displayEmail = profile.email || session?.user.email || "";
   const roleLabel = role === "admin" ? "Administrator" : role === "personnel" ? "City Pound Personnel" : "Pet Owner";
-  const initials = displayName.split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase() || "VC";
+  const avatarUrl = session?.user.user_metadata.avatar_url;
+  const photoUrl = typeof avatarUrl === "string" ? avatarUrl : undefined;
   const currentDate = now.toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric", timeZone: PHILIPPINE_TIME_ZONE });
 
   useEffect(() => {
@@ -350,7 +352,7 @@ export function AppShell({
   };
   return <div className="min-h-screen bg-background">
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-[296px] border-r border-sidebar-border bg-sidebar lg:block">
-        <SidebarBody name={displayName} role={roleLabel} counts={sidebarCounts} />
+        <SidebarBody name={displayName} role={roleLabel} photoUrl={photoUrl} counts={sidebarCounts} />
       </aside>
 
       <div className="lg:pl-[296px]">
@@ -367,7 +369,7 @@ export function AppShell({
                   <SheetTitle>Veticare navigation</SheetTitle>
                   <SheetDescription>Admin dashboard sections</SheetDescription>
                 </SheetHeader>
-                <SidebarBody onNavigate={() => setMobileOpen(false)} name={displayName} role={roleLabel} counts={sidebarCounts} />
+                <SidebarBody onNavigate={() => setMobileOpen(false)} name={displayName} role={roleLabel} photoUrl={photoUrl} counts={sidebarCounts} />
               </SheetContent>
             </Sheet>
 
@@ -436,9 +438,9 @@ export function AppShell({
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button type="button" className="flex items-center gap-2.5 rounded-xl px-1.5 py-1.5 text-left transition-colors hover:bg-secondary sm:px-2">
-                    <span className="relative grid size-9 place-items-center rounded-full bg-primary-soft text-[12px] font-bold text-primary">
-                      {initials}
+                  <button type="button" aria-label={`Account menu for ${displayName}`} className="flex items-center gap-2.5 rounded-xl px-1.5 py-1.5 text-left transition-colors hover:bg-secondary sm:px-2">
+                    <span className="relative shrink-0">
+                      <AccountAvatar name={displayName} photoUrl={photoUrl} className="size-9 bg-primary-soft text-primary" />
                       <span className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-card bg-success" />
                     </span>
                     <span className="hidden leading-tight sm:block">
@@ -486,11 +488,12 @@ export function AppShell({
       </Dialog>
 
       <Dialog open={accountSettingsOpen} onOpenChange={setAccountSettingsOpen}>
-        <DialogContent className="rounded-xl border-border bg-card sm:max-w-[460px]">
+        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl border-border bg-card sm:max-w-[460px]">
           <DialogHeader>
             <DialogTitle>Account settings</DialogTitle>
             <DialogDescription>Update the profile details shown for your signed-in account.</DialogDescription>
           </DialogHeader>
+          <ProfilePhoto name={displayName} photoUrl={photoUrl} />
           <form onSubmit={saveAccountSettings} className="space-y-3">
             <div className="space-y-1.5">
               <Label htmlFor="account-name">Full name</Label>
