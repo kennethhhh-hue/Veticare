@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { PetPhoto } from "@/components/owner-app/pet-photo";
 import { Button } from "@/components/ui/button";
+import { formatCalendarDate } from "@/lib/philippine-date";
 import { cn } from "@/lib/utils";
 import {
   registrationLabels,
@@ -21,7 +22,6 @@ import {
   vaccinationLabels,
   type PersonnelPet,
   type RegistrationState,
-  type ScanFollowUp,
   type VaccinationState,
 } from "@/data/personnel";
 
@@ -45,8 +45,9 @@ interface PetRecordProps {
   onBack?: () => void;
   onVerify?: () => void;
   onFlag?: () => void;
-  onRequestFollowUp?: (type: ScanFollowUp) => void;
-  requestedFollowUps?: ScanFollowUp[];
+  onRecordVaccination?: () => void;
+  onRequestRegistration?: () => void;
+  registrationRequested?: boolean;
   onScanAnother?: () => void;
   onLogImpound?: () => void;
   verified?: boolean;
@@ -59,8 +60,9 @@ export function PetRecord({
   onBack,
   onVerify,
   onFlag,
-  onRequestFollowUp,
-  requestedFollowUps = [],
+  onRecordVaccination,
+  onRequestRegistration,
+  registrationRequested = false,
   onScanAnother,
   onLogImpound,
   verified = false,
@@ -69,8 +71,6 @@ export function PetRecord({
   const registrationOk = pet.registration === "active" || pet.registration === "expiring";
   const vaccinationOk = pet.vaccination === "complete";
   const needsReview = !registrationOk || !vaccinationOk;
-  const vaccinationRequested = requestedFollowUps.includes("vaccination");
-  const registrationRequested = requestedFollowUps.includes("registration");
 
   return (
     <div className="space-y-3">
@@ -139,18 +139,9 @@ export function PetRecord({
             <p className="text-[8.5px] font-bold uppercase tracking-[0.12em] text-muted-foreground/80">
               Vaccination
             </p>
-            <p
-              className={cn(
-                "mt-0.5 inline-flex items-center gap-1 text-[10px] font-semibold",
-                pet.vaccination === "complete"
-                  ? "text-success"
-                  : pet.vaccination === "due"
-                    ? "text-warning"
-                    : pet.vaccination === "overdue" ? "text-destructive" : "text-muted-foreground",
-              )}
-            >
+            <p className={cn("mt-0.5 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold", vaccinationTone[pet.vaccination])}>
               <Syringe className="size-2.5" />
-              {pet.vaccination === "unknown" ? pet.lastVaccine : vaccinationLabels[pet.vaccination]}
+              {vaccinationLabels[pet.vaccination]}
             </p>
           </div>
           <div className="min-w-0">
@@ -168,6 +159,16 @@ export function PetRecord({
             <p className="mt-0.5 text-[10px] font-semibold text-foreground">{pet.registeredOn}</p>
           </div>
         </div>
+
+        {pet.lastVaccine && pet.lastVaccinatedOn ? (
+          <section className="border-t border-border px-3.5 py-2.5">
+            <h2 className="text-[8.5px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Vaccination details</h2>
+            <div className="mt-1 flex flex-wrap items-baseline justify-between gap-1.5 text-[11px]">
+              <p className="break-words font-semibold text-foreground">{pet.lastVaccine}</p>
+              <time dateTime={pet.lastVaccinatedOn} className="text-muted-foreground">{formatCalendarDate(pet.lastVaccinatedOn)}</time>
+            </div>
+          </section>
+        ) : null}
 
         <div className="border-t border-border bg-secondary/30 px-3.5 py-2.5">
           <div className="flex items-center justify-between">
@@ -190,7 +191,7 @@ export function PetRecord({
         </div>
       </div>
 
-      {!onRequestFollowUp ? (
+      {mode === "verify" ? (
         <div
           className={cn(
             "flex items-start gap-2 rounded-xl border px-2.5 py-2",
@@ -206,8 +207,8 @@ export function PetRecord({
           )}
           <p className="text-[9.5px] leading-relaxed text-muted-foreground">
             {needsReview
-              ? `This pet needs attention: ${registrationLabels[pet.registration].toLowerCase()} registration and ${pet.lastVaccinatedOn ? "vaccination validity needs review" : vaccinationLabels[pet.vaccination].toLowerCase()}. ${pet.lastVaccinatedOn && pet.vaccination !== "complete" ? `Last record: ${pet.lastVaccine}.` : ""}`
-              : `Registration and vaccination are current. ${pet.lastVaccine}.`}
+              ? [!registrationOk ? `Registration: ${registrationLabels[pet.registration]}.` : "", !vaccinationOk ? `${vaccinationLabels[pet.vaccination]}.` : ""].filter(Boolean).join(" ")
+              : "Registration is active and a vaccination is on file."}
           </p>
         </div>
       ) : null}
@@ -223,29 +224,17 @@ export function PetRecord({
             Report Impound
           </Button>
         ) : null}
-        {onRequestFollowUp ? (
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onRequestFollowUp("vaccination")}
-              disabled={vaccinationOk || vaccinationRequested}
-              className="h-10 w-full rounded-xl border-border text-[11.5px] font-semibold text-foreground/85 disabled:opacity-60"
-            >
-              <Syringe className="size-4 text-primary" />
-              {vaccinationOk ? "Vaccination Complete" : vaccinationRequested ? "Vaccination Requested" : scanFollowUpLabels.vaccination}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onRequestFollowUp("registration")}
-              disabled={registrationOk || registrationRequested}
-              className="h-10 w-full rounded-xl border-border text-[11.5px] font-semibold text-foreground/85 disabled:opacity-60"
-            >
-              <ClipboardList className="size-4 text-primary" />
-              {registrationOk ? "Already Registered" : registrationRequested ? "Registration Requested" : scanFollowUpLabels.registration}
-            </Button>
-          </>
+        {onRecordVaccination ? (
+          <Button type="button" variant="outline" onClick={onRecordVaccination} className="h-10 w-full rounded-xl border-border text-[11.5px] font-semibold text-foreground/85">
+            <Syringe className="size-4 text-primary" />
+            Record vaccination
+          </Button>
+        ) : null}
+        {onRequestRegistration ? (
+          <Button type="button" variant="outline" onClick={onRequestRegistration} disabled={registrationOk || registrationRequested} className="h-10 w-full rounded-xl border-border text-[11.5px] font-semibold text-foreground/85 disabled:opacity-60">
+            <ClipboardList className="size-4 text-primary" />
+            {registrationOk ? "Already Registered" : registrationRequested ? "Registration Requested" : scanFollowUpLabels.registration}
+          </Button>
         ) : null}
         {onVerify ? (
           <Button
@@ -288,7 +277,7 @@ export function PetRecord({
 
       {mode === "verify" ? (
         <p className="text-center text-[9px] leading-relaxed text-muted-foreground/80">
-          Personnel access is limited to verification. Record edits require an admin.
+          You can verify registration here. To record a vaccination, open the pet in Scan.
         </p>
       ) : null}
     </div>

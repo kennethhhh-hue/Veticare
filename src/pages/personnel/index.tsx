@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { BadgeCheck, History, House, ScanLine, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -13,10 +14,9 @@ import type { Tables } from "@/integrations/supabase/types";
 import { formatCalendarDate, getPhilippineDateKey } from "@/lib/philippine-date";
 import type { OwnerNotification } from "@/pages/owner-app/notifications-screen";
 import {
+  getScanHistoryResult,
   scanFollowUpLabels,
   type PersonnelPet,
-  type ScanFollowUp,
-  type ScanFollowUpRequest,
   type ScanEntry,
   type ScanResult,
 } from "@/data/personnel";
@@ -29,12 +29,6 @@ export type PersonnelImpoundReport = Tables<"personnel_impound_reports"> & {
 type ReviewFlag = Pick<Tables<"personnel_review_flags">, "pet_record_id" | "request_type">;
 
 const activityErrorMessage = (error: { message: string; code?: string }) => {
-  if (error.code === "PGRST204" && error.message.includes("last_vaccination_date")) {
-    return "Vaccination dates are unavailable. Apply the personnel last vaccination date migration and refresh the page.";
-  }
-  if (error.code === "PGRST204" && error.message.includes("vaccine_name")) {
-    return "Vaccine names are unavailable. Apply the personnel scan form fields migration and refresh the page.";
-  }
   if (error.code === "PGRST204" && error.message.includes("request_type")) {
     return "Follow-up requests are unavailable. Apply the personnel scan follow-ups migration and refresh the page.";
   }
@@ -77,6 +71,7 @@ const isTab = (value: string | null): value is PersonnelTab =>
 
 const PersonnelApp = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [scans, setScans] = useState<ScanEntry[]>([]);
   const [scanRegistry, setScanRegistry] = useState<PersonnelPet[]>([]);
@@ -87,6 +82,7 @@ const PersonnelApp = () => {
   const activityUserId = useRef<string | null>(null);
   const activityOfficer = useRef("");
   const activityVersion = useRef(0);
+  const registryVersion = useRef(0);
   const pendingActivity = useRef(new Set<string>());
   const [today, setToday] = useState(getPhilippineDateKey);
   const [tab, setTabState] = useState<PersonnelTab>(() => {
@@ -231,87 +227,75 @@ const PersonnelApp = () => {
     setNotifications((current) => current.map((item) => item.id === notification.id ? { ...item, read_at: readAt } : item));
   };
 
+  const loadIssuedPets = useCallback(async () => {
+    const version = ++registryVersion.current;
+    const { data: petRows, error: petsError } = await supabase
+      .from("pets")
+      .select("*, pet_vaccinations(vaccine_name, administered_on)")
+      .eq("status", "approved")
+      .not("pet_id", "is", null)
+      .not("qr_code", "is", null)
+      .order("administered_on", { referencedTable: "pet_vaccinations", ascending: false })
+      .order("created_at", { referencedTable: "pet_vaccinations", ascending: false })
+      .limit(1, { referencedTable: "pet_vaccinations" });
+    if (version !== registryVersion.current) return;
+    if (petsError) {
+      console.error("Unable to load issued pet identifiers:", petsError.message);
+      setScanRegistry([]);
+      return;
+    }
+
+    const ownerIds = [...new Set((petRows ?? []).map((pet) => pet.owner_id))];
+    const { data: profiles, error: profilesError } = ownerIds.length
+      ? await supabase.from("profiles").select("id, full_name, phone, barangay").in("id", ownerIds)
+      : { data: [], error: null };
+    if (version !== registryVersion.current) return;
+    if (profilesError) {
+      console.error("Unable to load owner contact details:", profilesError.message);
+      setScanRegistry([]);
+      return;
+    }
+
+    const profilesById = new Map((profiles ?? []).map((profile) => [profile.id, profile]));
+    const currentDate = getPhilippineDateKey();
+    const issuedPets: PersonnelPet[] = (petRows ?? []).map((pet) => {
+      const ownerProfile = profilesById.get(pet.owner_id);
+      const vaccination = pet.pet_vaccinations?.[0];
+      const expired = pet.pet_id_status === "expired" ||
+        (pet.pet_id_valid_through != null && pet.pet_id_valid_through < currentDate);
+      return {
+        id: pet.pet_id ?? pet.id,
+        recordId: pet.id,
+        name: pet.name,
+        species: pet.species as "Dog" | "Cat",
+        breed: pet.breed,
+        sex: pet.sex as "Male" | "Female",
+        age: pet.age,
+        color: pet.color,
+        owner: ownerProfile?.full_name || "Pet owner",
+        contact: ownerProfile?.phone || "—",
+        barangay: ownerProfile?.barangay || "—",
+        registration: expired ? "expired" : "active",
+        impoundClaimed: Boolean(pet.impound_claimed_at),
+        registeredOn: new Date(pet.created_at).toLocaleDateString(undefined, { month: "short", year: "numeric" }),
+        validThrough: pet.pet_id_valid_through
+          ? new Date(`${pet.pet_id_valid_through}T12:00:00+08:00`).toLocaleDateString("en-PH", { dateStyle: "medium", timeZone: "Asia/Manila" })
+          : "Not available",
+        vaccination: vaccination ? "complete" : "unknown",
+        lastVaccine: vaccination?.vaccine_name,
+        lastVaccinatedOn: vaccination?.administered_on,
+        photoUrl: pet.photo_url ?? undefined,
+        qrCode: pet.qr_code,
+      };
+    });
+    setScanRegistry(issuedPets);
+  }, []);
+
   useEffect(() => {
-    let active = true;
-    const loadIssuedPets = async () => {
-      const { data: petRows, error: petsError } = await supabase
-        .from("pets")
-        .select("*")
-        .eq("status", "approved")
-        .not("pet_id", "is", null)
-        .not("qr_code", "is", null);
-      if (!active) return;
-      if (petsError) {
-        console.error("Unable to load issued pet identifiers:", petsError.message);
-        setScanRegistry([]);
-        return;
-      }
-
-      const ownerIds = [...new Set((petRows ?? []).map((pet) => pet.owner_id))];
-      const [{ data: profiles, error: profilesError }, vaccinationResult] = await Promise.all([
-        ownerIds.length
-          ? supabase.from("profiles").select("id, full_name, phone, barangay").in("id", ownerIds)
-          : { data: [], error: null },
-        supabase.from("pet_vaccinations").select("pet_record_id, vaccine_name, administered_on")
-          .order("administered_on", { ascending: false }).order("created_at", { ascending: false }),
-      ]);
-      if (!active) return;
-      if (profilesError) {
-        console.error("Unable to load owner contact details:", profilesError.message);
-        setScanRegistry([]);
-        return;
-      }
-
-      const profilesById = new Map((profiles ?? []).map((profile) => [profile.id, profile]));
-      const latestVaccinationByPet = new Map<string, { vaccine_name: string; administered_on: string }>();
-      for (const vaccination of vaccinationResult.data ?? []) {
-        if (!latestVaccinationByPet.has(vaccination.pet_record_id)) {
-          latestVaccinationByPet.set(vaccination.pet_record_id, vaccination);
-        }
-      }
-      const currentDate = getPhilippineDateKey();
-      const issuedPets: PersonnelPet[] = (petRows ?? []).map((pet) => {
-        const ownerProfile = profilesById.get(pet.owner_id);
-        const vaccination = latestVaccinationByPet.get(pet.id);
-        const expired = pet.pet_id_status === "expired" ||
-          (pet.pet_id_valid_through != null && pet.pet_id_valid_through < currentDate);
-        return {
-          id: pet.pet_id ?? pet.id,
-          recordId: pet.id,
-          name: pet.name,
-          species: pet.species as "Dog" | "Cat",
-          breed: pet.breed,
-          sex: pet.sex as "Male" | "Female",
-          age: pet.age,
-          color: pet.color,
-          owner: ownerProfile?.full_name || "Pet owner",
-          contact: ownerProfile?.phone || "—",
-          barangay: ownerProfile?.barangay || "—",
-          registration: expired ? "expired" : "active",
-          impoundClaimed: Boolean(pet.impound_claimed_at),
-          registeredOn: new Date(pet.created_at).toLocaleDateString(undefined, { month: "short", year: "numeric" }),
-          validThrough: pet.pet_id_valid_through
-            ? new Date(`${pet.pet_id_valid_through}T12:00:00+08:00`).toLocaleDateString("en-PH", { dateStyle: "medium", timeZone: "Asia/Manila" })
-            : "Not available",
-          vaccination: "unknown",
-          lastVaccine: vaccination
-            ? `${vaccination.vaccine_name} · ${formatCalendarDate(vaccination.administered_on)}`
-            : vaccinationResult.error ? "Vaccination records unavailable" : "No vaccination record linked",
-          lastVaccinatedOn: vaccination?.administered_on,
-          photoUrl: pet.photo_url ?? undefined,
-          qrCode: pet.qr_code,
-        };
-      });
-      setScanRegistry(issuedPets);
-    };
-
     void loadIssuedPets();
     window.addEventListener("focus", loadIssuedPets);
-    return () => {
-      active = false;
-      window.removeEventListener("focus", loadIssuedPets);
-    };
-  }, []);
+    return () => window.removeEventListener("focus", loadIssuedPets);
+  }, [loadIssuedPets]);
 
   const setTab = (next: PersonnelTab) => {
     setTabState(next);
@@ -354,9 +338,8 @@ const PersonnelApp = () => {
   const flagPet = async (
     petId: string,
     scanId?: string,
-    request: ScanFollowUpRequest | { type: "general" } = { type: "general" },
+    requestType: "general" | "registration" = "general",
   ): Promise<boolean> => {
-    const requestType = request.type;
     const pet = scanRegistry.find((item) => item.id === petId);
     if (!activityReady || !pet) {
       toast.error(activityError || "Personnel activity or pet record is unavailable.");
@@ -376,8 +359,6 @@ const PersonnelApp = () => {
         pet_record_id: pet.recordId,
         scan_id: scan?.id,
         request_type: requestType === "general" ? undefined : requestType,
-        vaccine_name: request.type === "vaccination" ? request.vaccineName : undefined,
-        last_vaccination_date: request.type === "vaccination" ? request.lastVaccinationDate ?? undefined : undefined,
       });
     if (error) {
       if (error.code === "23505") {
@@ -399,6 +380,24 @@ const PersonnelApp = () => {
     return true;
   };
 
+  const recordVaccination = async (pet: PersonnelPet, vaccineName: string, administeredOn: string) => {
+    const { error } = await supabase.from("pet_vaccinations").insert({
+      pet_record_id: pet.recordId,
+      vaccine_name: vaccineName,
+      administered_on: administeredOn,
+    });
+    if (error && error.code !== "23505") throw new Error(error.message);
+
+    setScanRegistry((current) => current.map((record) =>
+      record.recordId === pet.recordId && (!record.lastVaccinatedOn || record.lastVaccinatedOn <= administeredOn)
+        ? { ...record, vaccination: "complete", lastVaccine: vaccineName, lastVaccinatedOn: administeredOn }
+        : record,
+    ));
+    void queryClient.invalidateQueries({ queryKey: ["pet-vaccinations"] });
+    void loadIssuedPets();
+    return true;
+  };
+
   const verifyPet = async (petId: string): Promise<boolean> => {
     const pet = scanRegistry.find((item) => item.id === petId);
     if (!activityReady || !pet) {
@@ -417,7 +416,14 @@ const PersonnelApp = () => {
   const verifiedIds = scanRegistry.filter((pet) => verifications.some((verification) =>
     verification.pet_record_id === pet.recordId && getPhilippineDateKey(new Date(verification.created_at)) === today,
   )).map((pet) => pet.id);
-  const reviewIds = scanRegistry.filter((pet) => reviewFlags.some((flag) => flag.pet_record_id === pet.recordId)).map((pet) => pet.id);
+  const reviewIds = scanRegistry.filter((pet) => reviewFlags.some((flag) => flag.pet_record_id === pet.recordId && flag.request_type === "general")).map((pet) => pet.id);
+  const scanHistory = useMemo(() => {
+    const petsById = new Map(scanRegistry.map((pet) => [pet.recordId, pet]));
+    return scans.map((scan) => ({
+      ...scan,
+      displayResult: getScanHistoryResult(scan, petsById.get(scan.petRecordId)),
+    }));
+  }, [scanRegistry, scans]);
 
   return (
     <div className="mobile-app-viewport relative flex flex-col items-center justify-center bg-background sm:px-6 sm:py-6">
@@ -437,7 +443,7 @@ const PersonnelApp = () => {
               {activityError ? <p role="alert" className="mx-5 mt-3 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">{activityError}</p> : null}
               {tab === "home" ? (
                 <HomeScreen
-                  scans={scans}
+                  scans={scanHistory}
                   verifiedCount={verifiedIds.length}
                   reviewCount={reviewFlags.length}
                   activityReady={activityReady}
@@ -458,8 +464,9 @@ const PersonnelApp = () => {
                 <ScannerScreen
                   pets={scanRegistry}
                   onRecord={(pet, result, note) => withActivityLock<string | null>("scan", null, () => addScan(pet, result, note))}
-                  openFollowUps={reviewFlags.filter((flag): flag is { pet_record_id: string; request_type: ScanFollowUp } => flag.request_type !== "general")}
-                  onRequestFollowUp={(scanId, petId, request) => withActivityLock(`flag:${petId}:${request.type}`, false, () => flagPet(petId, scanId, request))}
+                  registrationRequestPetIds={reviewFlags.filter((flag) => flag.request_type === "registration").map((flag) => flag.pet_record_id)}
+                  onRequestRegistration={(scanId, petId) => withActivityLock(`flag:${petId}:registration`, false, () => flagPet(petId, scanId, "registration"))}
+                  onRecordVaccination={(pet, name, date) => withActivityLock(`vaccination:${pet.recordId}`, false, () => recordVaccination(pet, name, date))}
                   onImpound={(pet, location, date) => withActivityLock("impound", false, async () => {
                     const { error } = await supabase.from("personnel_impound_reports").insert({
                       pet_record_id: pet.recordId,
@@ -484,7 +491,7 @@ const PersonnelApp = () => {
                   onFlag={(petId) => withActivityLock(`flag:${petId}`, false, () => flagPet(petId))}
                 />
               ) : null}
-              {tab === "history" ? <HistoryScreen scans={scans} pets={scanRegistry} /> : null}
+              {tab === "history" ? <HistoryScreen scans={scanHistory} pets={scanRegistry} /> : null}
               {tab === "profile" ? (
                 <ProfileScreen
                   identity={personnelIdentity}

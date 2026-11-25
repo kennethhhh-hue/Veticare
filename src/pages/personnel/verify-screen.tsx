@@ -42,7 +42,8 @@ export function VerifyScreen({
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<FilterKey>("all");
-  const [selected, setSelected] = useState<PersonnelPet | null>(null);
+  const [selectedPet, setSelected] = useState<PersonnelPet | null>(null);
+  const selected = selectedPet ? pets.find((pet) => pet.recordId === selectedPet.recordId) ?? selectedPet : null;
   const pendingRef = useRef(false);
   const [pending, setPending] = useState(false);
 
@@ -227,8 +228,7 @@ export function VerifyScreen({
             Limited access
           </p>
           <p className="mt-1 text-[9.5px] leading-relaxed text-muted-foreground">
-            Personnel can verify annual registrations and flag records. Edits, approvals
-            and deletions stay with OCVAS admins.
+            Personnel can verify registrations, flag records for OCVAS review, and record vaccinations from Scan.
           </p>
         </div>
       </div>

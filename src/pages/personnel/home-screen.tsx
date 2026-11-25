@@ -11,8 +11,8 @@ import {
 } from "lucide-react";
 import {
   scanResultLabels,
-  type ScanEntry,
-  type ScanResult,
+  type ScanHistoryEntry,
+  type ScanHistoryResult,
 } from "@/data/personnel";
 import type { PersonnelImpoundReport } from "@/pages/personnel";
 import type { OwnerNotification } from "@/pages/owner-app/notifications-screen";
@@ -23,22 +23,16 @@ import { AccountAvatar } from "@/components/veticare/account-avatar";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-const resultTone: Record<ScanResult, string> = {
+const resultTone: Record<ScanHistoryResult, string> = {
   verified: "bg-success/10 text-success",
+  resolved: "bg-success/10 text-success",
   flagged: "bg-warning/12 text-warning",
   expired: "bg-destructive/10 text-destructive",
   unregistered: "bg-secondary text-muted-foreground",
 };
 
-const resultDot: Record<ScanResult, string> = {
-  verified: "bg-success",
-  flagged: "bg-warning",
-  expired: "bg-destructive",
-  unregistered: "bg-muted-foreground",
-};
-
 interface HomeScreenProps {
-  scans: ScanEntry[];
+  scans: ScanHistoryEntry[];
   verifiedCount: number;
   reviewCount: number;
   activityReady: boolean;
@@ -226,9 +220,9 @@ export function HomeScreen({ scans, verifiedCount, reviewCount, activityReady, t
                   </span>
                 </span>
                 <span
-                  className={`shrink-0 rounded-full px-1.5 py-0.5 text-[8.5px] font-bold ${resultTone[scan.result]}`}
+                  className={`shrink-0 rounded-full px-1.5 py-0.5 text-[8.5px] font-bold ${resultTone[scan.displayResult]}`}
                 >
-                  {scanResultLabels[scan.result]}
+                  {scanResultLabels[scan.displayResult]}
                 </span>
               </button>
             </li>

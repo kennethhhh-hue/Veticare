@@ -1,10 +1,8 @@
 export type RegistrationState = "active" | "expiring" | "expired" | "unregistered";
 export type VaccinationState = "complete" | "due" | "overdue" | "unknown";
 export type ScanResult = "verified" | "flagged" | "expired" | "unregistered";
-export type ScanFollowUpRequest =
-  | { type: "vaccination"; vaccineName: string; lastVaccinationDate: string | null }
-  | { type: "registration" };
-export type ScanFollowUp = ScanFollowUpRequest["type"];
+export type ScanHistoryResult = ScanResult | "resolved";
+export type ScanFollowUp = "vaccination" | "registration";
 
 export const scanFollowUpLabels: Record<ScanFollowUp, string> = {
   vaccination: "For Vaccination",
@@ -28,7 +26,7 @@ export interface PersonnelPet {
   registeredOn: string;
   validThrough: string;
   vaccination: VaccinationState;
-  lastVaccine: string;
+  lastVaccine?: string;
   lastVaccinatedOn?: string;
   qrCode?: string | null;
   photoUrl?: string;
@@ -46,6 +44,8 @@ export interface ScanEntry {
   note: string;
 }
 
+export type ScanHistoryEntry = ScanEntry & { displayResult: ScanHistoryResult };
+
 export const registrationLabels: Record<RegistrationState, string> = {
   active: "Active",
   expiring: "Expiring soon",
@@ -54,15 +54,33 @@ export const registrationLabels: Record<RegistrationState, string> = {
 };
 
 export const vaccinationLabels: Record<VaccinationState, string> = {
-  complete: "Vaccination complete",
+  complete: "Vaccinated",
   due: "Booster due",
   overdue: "Overdue",
-  unknown: "No vaccination record linked",
+  unknown: "No vaccination recorded",
 };
 
-export const scanResultLabels: Record<ScanResult, string> = {
+export const scanResultLabels: Record<ScanHistoryResult, string> = {
   verified: "Verified",
-  flagged: "Flagged",
+  resolved: "Resolved",
+  flagged: "Needs review",
   expired: "Expired",
   unregistered: "Unregistered",
 };
+
+const vaccinationReviewNotes = new Set([
+  vaccinationLabels.unknown.toLowerCase(),
+  vaccinationLabels.due.toLowerCase(),
+  vaccinationLabels.overdue.toLowerCase(),
+  "no vaccination record linked",
+]);
+
+export function getScanHistoryResult(scan: ScanEntry, pet?: PersonnelPet): ScanHistoryResult {
+  if (scan.result !== "flagged" || pet?.registration !== "active" || pet.vaccination !== "complete") {
+    return scan.result;
+  }
+  const note = scan.note.trim().toLowerCase().replace(/\.$/, "");
+  return vaccinationReviewNotes.has(note) || note.endsWith("; vaccination needs attention")
+    ? "resolved"
+    : scan.result;
+}

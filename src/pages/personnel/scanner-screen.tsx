@@ -10,10 +10,8 @@ import { cn } from "@/lib/utils";
 import { getPhilippineDateKey } from "@/lib/philippine-date";
 import { PetRecord } from "@/pages/personnel/pet-record";
 import {
-  scanFollowUpLabels,
+  vaccinationLabels,
   type PersonnelPet,
-  type ScanFollowUp,
-  type ScanFollowUpRequest,
   type ScanResult,
 } from "@/data/personnel";
 
@@ -41,33 +39,35 @@ const resultNote = (pet: PersonnelPet, result: ScanResult) => {
   if (result === "flagged") {
     return pet.registration === "expiring"
       ? `Registration expiring ${pet.validThrough}.`
-      : `${pet.lastVaccine}; vaccination needs attention.`;
+      : `${vaccinationLabels[pet.vaccination]}.`;
   }
-  return "Registration and vaccination are current.";
+  return "Registration is active and a vaccination is on file.";
 };
 
 interface ScannerScreenProps {
   pets: PersonnelPet[];
-  openFollowUps: { pet_record_id: string; request_type: ScanFollowUp }[];
+  registrationRequestPetIds: string[];
   onRecord: (pet: PersonnelPet, result: ScanResult, note: string) => Promise<string | null>;
-  onRequestFollowUp: (scanId: string, petId: string, request: ScanFollowUpRequest) => Promise<boolean>;
+  onRequestRegistration: (scanId: string, petId: string) => Promise<boolean>;
+  onRecordVaccination: (pet: PersonnelPet, vaccineName: string, administeredOn: string) => Promise<boolean>;
   onImpound: (pet: PersonnelPet, locationFound: string, dateImpounded: string) => Promise<boolean>;
 }
 
-export function ScannerScreen({ pets, openFollowUps, onRecord, onRequestFollowUp, onImpound }: ScannerScreenProps) {
+export function ScannerScreen({ pets, registrationRequestPetIds, onRecord, onRequestRegistration, onRecordVaccination, onImpound }: ScannerScreenProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const cameraControlsRef = useRef<{ stop: () => void } | null>(null);
   const scanCompletedRef = useRef(false);
   const submittingRef = useRef(false);
-  const savingFollowUpRef = useRef(false);
+  const savingScanActionRef = useRef(false);
   const impoundSubmittingRef = useRef(false);
   const [phase, setPhase] = useState<"idle" | "result">("idle");
   const [cameraStarting, setCameraStarting] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
-  const [savingFollowUp, setSavingFollowUp] = useState(false);
-  const [pet, setPet] = useState<PersonnelPet | null>(null);
+  const [savingScanAction, setSavingScanAction] = useState(false);
+  const [scannedPet, setScannedPet] = useState<PersonnelPet | null>(null);
+  const pet = scannedPet ? pets.find((item) => item.recordId === scannedPet.recordId) ?? scannedPet : null;
   const [scanId, setScanId] = useState<string | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
   const [manualValue, setManualValue] = useState("");
@@ -75,7 +75,7 @@ export function ScannerScreen({ pets, openFollowUps, onRecord, onRequestFollowUp
   const [vaccinationOpen, setVaccinationOpen] = useState(false);
   const [vaccineName, setVaccineName] = useState("");
   const [vaccineError, setVaccineError] = useState<string | null>(null);
-  const [lastVaccinationDate, setLastVaccinationDate] = useState("");
+  const [administeredOn, setAdministeredOn] = useState(getPhilippineDateKey);
   const [vaccinationDateError, setVaccinationDateError] = useState<string | null>(null);
   const [impoundOpen, setImpoundOpen] = useState(false);
   const [impoundSubmitting, setImpoundSubmitting] = useState(false);
@@ -104,14 +104,14 @@ export function ScannerScreen({ pets, openFollowUps, onRecord, onRequestFollowUp
       setCameraError("Scan was not recorded. Try again.");
       return;
     }
-    setPet(nextPet);
+    setScannedPet(nextPet);
     setScanId(id);
     setManualOpen(false);
     setManualValue("");
     setPhase("result");
     if (result === "verified") {
       toast.success(`${nextPet.name} verified`, {
-        description: "Registration and vaccination are current.",
+        description: "Registration is active and a vaccination is on file.",
       });
     } else {
       toast.warning(`${nextPet.name} needs attention`, {
@@ -119,7 +119,7 @@ export function ScannerScreen({ pets, openFollowUps, onRecord, onRequestFollowUp
           ? "Registration is expired. Advise the owner to renew."
           : result === "unregistered"
             ? "No active registration was found for this QR."
-            : nextPet.vaccination === "unknown" && !nextPet.lastVaccinatedOn ? nextPet.lastVaccine : "Vaccination or renewal needs review.",
+            : resultNote(nextPet, result),
       });
     }
   };
@@ -213,47 +213,51 @@ export function ScannerScreen({ pets, openFollowUps, onRecord, onRequestFollowUp
   const reset = () => {
     stopCamera();
     setCameraError(null);
-    setPet(null);
+    setScannedPet(null);
     setScanId(null);
     setPhase("idle");
   };
 
-  const handleFollowUp = async (request: ScanFollowUpRequest): Promise<boolean> => {
-    if (!scanId || !pet || savingFollowUpRef.current) return false;
-    savingFollowUpRef.current = true;
-    setSavingFollowUp(true);
+  const requestRegistration = async () => {
+    if (!scanId || !pet || savingScanActionRef.current) return false;
+    savingScanActionRef.current = true;
+    setSavingScanAction(true);
     try {
-      const saved = await onRequestFollowUp(scanId, pet.id, request);
-      if (saved) toast.success(`${scanFollowUpLabels[request.type]} request recorded for ${pet.name}.`);
-      return saved;
+      if (await onRequestRegistration(scanId, pet.id)) toast.success(`Registration request recorded for ${pet.name}.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to save the request.");
-      return false;
     } finally {
-      savingFollowUpRef.current = false;
-      setSavingFollowUp(false);
+      savingScanActionRef.current = false;
+      setSavingScanAction(false);
     }
   };
 
   const submitVaccination = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!pet || savingScanActionRef.current) return;
     const name = vaccineName.trim();
     if (!name || Array.from(name).length > MAX_VACCINE_NAME_LENGTH) {
       setVaccineError(`Enter a vaccine name up to ${MAX_VACCINE_NAME_LENGTH} characters.`);
       return;
     }
     setVaccineError(null);
-    if (lastVaccinationDate && !isValidDateThroughToday(lastVaccinationDate)) {
+    if (!isValidDateThroughToday(administeredOn)) {
       setVaccinationDateError("Enter a valid date on or before today (Philippine time).");
       return;
     }
     setVaccinationDateError(null);
-    if (await handleFollowUp({
-      type: "vaccination",
-      vaccineName: name,
-      lastVaccinationDate: lastVaccinationDate || null,
-    })) {
-      setVaccinationOpen(false);
+    savingScanActionRef.current = true;
+    setSavingScanAction(true);
+    try {
+      if (await onRecordVaccination(pet, name, administeredOn)) {
+        setVaccinationOpen(false);
+        toast.success(`Vaccination saved to ${pet.name}'s health record.`);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to save the vaccination.");
+    } finally {
+      savingScanActionRef.current = false;
+      setSavingScanAction(false);
     }
   };
 
@@ -308,25 +312,20 @@ export function ScannerScreen({ pets, openFollowUps, onRecord, onRequestFollowUp
 
       <div className="mt-4 px-5">
         {phase === "result" && pet ? (
-          <fieldset disabled={savingFollowUp}>
+          <fieldset disabled={savingScanAction}>
             <PetRecord
               pet={pet}
               mode="scan"
               onBack={reset}
-              onRequestFollowUp={(type) => {
-                if (type === "vaccination") {
-                  setVaccineName("");
-                  setVaccineError(null);
-                  setLastVaccinationDate("");
-                  setVaccinationDateError(null);
-                  setVaccinationOpen(true);
-                } else {
-                  void handleFollowUp({ type: "registration" });
-                }
+              onRecordVaccination={() => {
+                setVaccineName("");
+                setVaccineError(null);
+                setAdministeredOn(getPhilippineDateKey());
+                setVaccinationDateError(null);
+                setVaccinationOpen(true);
               }}
-              requestedFollowUps={openFollowUps
-                .filter((request) => request.pet_record_id === pet.recordId)
-                .map((request) => request.request_type)}
+              onRequestRegistration={() => void requestRegistration()}
+              registrationRequested={registrationRequestPetIds.includes(pet.recordId)}
               onLogImpound={() => {
                 setImpoundLocation(pet.barangay);
                 setImpoundDate(getPhilippineDateKey());
@@ -335,7 +334,7 @@ export function ScannerScreen({ pets, openFollowUps, onRecord, onRequestFollowUp
               }}
               onScanAnother={reset}
             />
-            {savingFollowUp ? <p role="status" className="mt-2 text-xs text-muted-foreground">Saving request...</p> : null}
+            {savingScanAction && !vaccinationOpen ? <p role="status" className="mt-2 text-xs text-muted-foreground">Saving request...</p> : null}
           </fieldset>
         ) : (
           <div className="space-y-3">
@@ -450,11 +449,11 @@ export function ScannerScreen({ pets, openFollowUps, onRecord, onRequestFollowUp
         )}
       </div>
 
-      <Dialog open={vaccinationOpen} onOpenChange={(open) => { if (!savingFollowUpRef.current) setVaccinationOpen(open); }}>
+      <Dialog open={vaccinationOpen} onOpenChange={(open) => { if (!savingScanActionRef.current) setVaccinationOpen(open); }}>
         <DialogContent className="max-h-[90dvh] w-[calc(100%-2rem)] max-w-[440px] overflow-y-auto rounded-xl border-border bg-card">
           <DialogHeader>
-            <DialogTitle>For Vaccination</DialogTitle>
-            <DialogDescription>{pet?.name}</DialogDescription>
+            <DialogTitle>Record vaccination</DialogTitle>
+            <DialogDescription>Save the vaccine given to {pet?.name} in the pet’s health record.</DialogDescription>
           </DialogHeader>
           <form onSubmit={submitVaccination} className="space-y-3">
             <div className="space-y-1.5">
@@ -468,7 +467,7 @@ export function ScannerScreen({ pets, openFollowUps, onRecord, onRequestFollowUp
                 }}
                 required
                 maxLength={MAX_VACCINE_NAME_LENGTH}
-                disabled={savingFollowUp}
+                disabled={savingScanAction}
                 aria-invalid={vaccineError ? true : undefined}
                 aria-describedby={vaccineError ? "vaccine-name-error" : undefined}
                 placeholder="Type the vaccine name"
@@ -476,20 +475,19 @@ export function ScannerScreen({ pets, openFollowUps, onRecord, onRequestFollowUp
               {vaccineError ? <p id="vaccine-name-error" role="alert" className="text-xs text-destructive">{vaccineError}</p> : null}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="last-vaccination-date">
-                Last vaccination date <span className="font-normal text-muted-foreground">(optional)</span>
-              </Label>
+              <Label htmlFor="vaccination-date">Date administered</Label>
               <Input
-                id="last-vaccination-date"
+                id="vaccination-date"
                 type="date"
-                value={lastVaccinationDate}
+                value={administeredOn}
                 onChange={(event) => {
-                  setLastVaccinationDate(event.target.value);
+                  setAdministeredOn(event.target.value);
                   setVaccinationDateError(null);
                 }}
                 min={MIN_CALENDAR_DATE}
                 max={getPhilippineDateKey()}
-                disabled={savingFollowUp}
+                required
+                disabled={savingScanAction}
                 aria-invalid={vaccinationDateError ? true : undefined}
                 aria-describedby={vaccinationDateError ? "last-vaccination-date-error" : undefined}
               />
@@ -498,8 +496,8 @@ export function ScannerScreen({ pets, openFollowUps, onRecord, onRequestFollowUp
               ) : null}
             </div>
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" disabled={savingFollowUp} onClick={() => setVaccinationOpen(false)}>Cancel</Button>
-              <Button type="submit" disabled={savingFollowUp}>{savingFollowUp ? "Saving..." : "Save request"}</Button>
+              <Button type="button" variant="outline" disabled={savingScanAction} onClick={() => setVaccinationOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={savingScanAction}>{savingScanAction ? "Saving…" : "Save vaccination"}</Button>
             </div>
           </form>
         </DialogContent>
