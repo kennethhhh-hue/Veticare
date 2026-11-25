@@ -70,21 +70,16 @@ const Login = () => {
         setError(signUpError.message);
         return;
       }
-      if (data.session) {
-        const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
-        if (signOutError) {
-          setSubmitting(false);
-          setError("Your account was created, but the session could not be closed. Please sign out before continuing.");
-          return;
-        }
-      }
       setSubmitting(false);
+      if (data.session) {
+        toast.success("Owner account created.");
+        navigate("/app", { replace: true });
+        return;
+      }
       setCreatingAccount(false);
       setPassword("");
       setConfirmPassword("");
-      setSignupMessage(data.session
-        ? "Your account was created. Sign in to check its approval status."
-        : "Check your email to confirm your account, then sign in. Admin approval is still required.");
+      setSignupMessage("Check your email to confirm your account, then sign in.");
       navigate("/login", { replace: true });
       return;
     }

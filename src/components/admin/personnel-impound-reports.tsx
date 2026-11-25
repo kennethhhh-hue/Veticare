@@ -61,7 +61,7 @@ type QueueItem = Report & {
   reporter: string;
 };
 
-export function PersonnelImpoundReports() {
+export function PersonnelImpoundReports({ onReviewed }: { onReviewed: () => void }) {
   const [reports, setReports] = useState<QueueItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -131,12 +131,17 @@ export function PersonnelImpoundReports() {
         toast.error("Report was not marked reviewed.", {
           description: "It may no longer be pending. Refresh the queue to check its status.",
         });
+        void loadReports();
+        onReviewed();
         return;
       }
+      loadVersion.current += 1;
+      setLoading(false);
       setReports((current) => current.filter((report) => report.id !== selected.id));
       setSelected(null);
+      onReviewed();
       toast.success("Report marked reviewed.", {
-        description: "No shelter intake was created and no messages were sent.",
+        description: `${selected.petName} is in the Impounded Animals list.`,
       });
     } catch (error) {
       toast.error("Unable to mark report reviewed.", {
@@ -152,7 +157,7 @@ export function PersonnelImpoundReports() {
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border p-4">
         <div>
           <h2 id="personnel-reports-heading" className="text-sm font-bold text-foreground">Personnel field impound reports</h2>
-          <p className="mt-1 text-xs text-muted-foreground">Pending reports are separate from shelter intake records.</p>
+          <p className="mt-1 text-xs text-muted-foreground">Review a report to add the animal to the impound list.</p>
         </div>
         <Button variant="outline" size="sm" disabled={loading || reviewing} onClick={() => void loadReports()}>
           <RefreshCw className={loading ? "size-4 animate-spin" : "size-4"} />
@@ -197,7 +202,7 @@ export function PersonnelImpoundReports() {
           <AlertDialogHeader>
             <AlertDialogTitle>Mark this report reviewed?</AlertDialogTitle>
             <AlertDialogDescription>
-              This marks the report for {selected?.petName} as reviewed only. It does not create a shelter intake or send messages.
+              {selected?.petName} will be added to the Impounded Animals list if there is no open intake. You can set the adoption status from the list.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

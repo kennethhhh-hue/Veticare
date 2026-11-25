@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { FunctionsFetchError, FunctionsHttpError } from "@supabase/supabase-js";
 import { useNavigate } from "react-router-dom";
 import {
@@ -66,6 +66,7 @@ import { type OwnerRecord } from "@/data/admin-records";
 import { supabase } from "@/integrations/supabase/client";
 
 const PAGE_SIZE = 5;
+const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"];
 type OwnerAccountAction = "reset-owner-password" | "delete-owner-account";
 
 interface OwnerPetProfile {
@@ -103,6 +104,10 @@ const Owners = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<OwnerRecord | null>(null);
+  const [ownerPhotos, setOwnerPhotos] = useState<Record<string, string | null>>({});
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const photoInput = useRef<HTMLInputElement>(null);
+  const photoLoad = useRef<{ ownerId: string; request: AbortController } | null>(null);
   const [accountAction, setAccountAction] = useState<{ type: OwnerAccountAction; owner: OwnerRecord } | null>(null);
   const [accountActionBusy, setAccountActionBusy] = useState(false);
   const [accountActionError, setAccountActionError] = useState<string | null>(null);
@@ -165,6 +170,57 @@ const Owners = () => {
   useEffect(() => {
     void loadOwners();
   }, [loadOwners]);
+
+  const selectedId = selected?.id;
+  useEffect(() => {
+    if (!selectedId) return;
+    const request = new AbortController();
+    photoLoad.current = { ownerId: selectedId, request };
+    void supabase.functions.invoke<{ photoUrl: string | null }>("admin-users", {
+      body: { action: "get-owner-photo", userId: selectedId },
+      signal: request.signal,
+    }).then(({ data, error }) => {
+      if (!request.signal.aborted && !error && data) {
+        setOwnerPhotos((current) => ({ ...current, [selectedId]: data.photoUrl }));
+      }
+    });
+    return () => request.abort();
+  }, [selectedId]);
+
+  const changeOwnerPhoto = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (!file || !selected || uploadingPhoto) return;
+    if (!file.size || !PHOTO_TYPES.includes(file.type)) {
+      toast.error("Choose a JPG, PNG, or WebP profile photo.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Profile photos must be 5 MB or smaller.");
+      return;
+    }
+
+    const ownerId = selected.id;
+    const body = new FormData();
+    body.set("userId", ownerId);
+    body.set("photo", file);
+    setUploadingPhoto(true);
+    try {
+      const { data, error } = await supabase.functions.invoke<{ photoUrl: string }>("admin-users", { body });
+      if (error) {
+        const details = error instanceof FunctionsHttpError ? await error.context.json().catch(() => null) : null;
+        throw new Error(typeof details?.error === "string" ? details.error : error.message);
+      }
+      if (!data?.photoUrl) throw new Error("The server did not confirm the photo update.");
+      if (photoLoad.current?.ownerId === ownerId) photoLoad.current.request.abort();
+      setOwnerPhotos((current) => ({ ...current, [ownerId]: data.photoUrl }));
+      toast.success("Owner profile photo updated.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to change the owner photo.");
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
 
   const filtered = useMemo(() => {
     const search = query.trim().toLowerCase();
@@ -665,9 +721,18 @@ const Owners = () => {
           {selected ? (
             <>
               <DialogHeader className="pr-9 text-left">
+                <div className="flex justify-end">
+                  <Button type="button" variant="outline" size="sm" className="h-8 rounded-lg text-[11px]" disabled={uploadingPhoto} onClick={() => photoInput.current?.click()}>
+                    <span aria-hidden="true">📷</span>{uploadingPhoto ? "Uploading…" : "Change Photo"}
+                  </Button>
+                  <input ref={photoInput} type="file" accept={PHOTO_TYPES.join(",")} onChange={(event) => void changeOwnerPhoto(event)} hidden />
+                </div>
                 <div className="flex items-center gap-3">
-                  <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary-soft text-[12px] font-bold text-primary">
+                  <span className="relative grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-primary-soft text-[12px] font-bold text-primary">
                     {initials(selected.name)}
+                    {ownerPhotos[selected.id] ? (
+                      <img src={ownerPhotos[selected.id] ?? undefined} alt={`${selected.name} profile photo`} className="absolute inset-0 size-full object-cover" />
+                    ) : null}
                   </span>
                   <div className="min-w-0 flex-1">
                     <DialogTitle className="break-words text-[16px] font-extrabold tracking-[-0.02em]">

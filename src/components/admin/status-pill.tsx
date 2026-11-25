@@ -7,8 +7,6 @@ type Status =
   | "active"
   | "inactive"
   | "completed"
-  | "kennel"
-  | "foster"
   | "reserved"
   | "expired"
   | "replaced"
@@ -27,8 +25,6 @@ const toneMap: Record<Status, { dot: string; chip: string; label: string }> = {
   active: { dot: "bg-success", chip: "bg-success/10 text-success", label: "Active" },
   inactive: { dot: "bg-muted-foreground", chip: "bg-secondary text-muted-foreground", label: "Inactive" },
   completed: { dot: "bg-success", chip: "bg-success/10 text-success", label: "Completed" },
-  kennel: { dot: "bg-info", chip: "bg-info/12 text-info", label: "In kennel" },
-  foster: { dot: "bg-warning", chip: "bg-warning/12 text-warning", label: "Foster" },
   reserved: { dot: "bg-primary", chip: "bg-primary-soft text-primary", label: "Reserved" },
   expired: { dot: "bg-destructive", chip: "bg-destructive/10 text-destructive", label: "Expired" },
   replaced: { dot: "bg-muted-foreground", chip: "bg-secondary text-muted-foreground", label: "Replaced" },

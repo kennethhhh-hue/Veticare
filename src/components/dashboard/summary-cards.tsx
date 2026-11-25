@@ -13,7 +13,7 @@ const DEFAULT_KENNEL_CAPACITY = 24;
 export function SummaryCards({ onOpen }: SummaryCardsProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [shelter, setShelter] = useState({ occupied: 0, capacity: DEFAULT_KENNEL_CAPACITY, kennel: 0, foster: 0, reserved: 0, longest: [] as { id: string; name: string; breed: string; days: number }[] });
+  const [shelter, setShelter] = useState({ occupied: 0, capacity: DEFAULT_KENNEL_CAPACITY, forAdoption: 0, longest: [] as { id: string; name: string; breed: string; days: number }[] });
   const [adoptionData, setAdoptionData] = useState({ thisMonth: 0, thisWeek: 0, pendingApplications: 0, avgDaysInCare: "—" as string | number, weekly: Array.from({ length: 5 }, (_, index) => ({ label: `W${index + 1}`, value: 0 })) });
 
   useEffect(() => {
@@ -22,7 +22,7 @@ export function SummaryCards({ onOpen }: SummaryCardsProps) {
       setLoading(true);
       setError(null);
       const [impoundsResult, adoptionsResult, settingsResult] = await Promise.all([
-        supabase.from("impounds").select("id, impound_id, name, breed, status, impound_status, impounded_at"),
+        supabase.from("impounds").select("id, impound_id, name, breed, status, impound_status, adoption_status, impounded_at"),
         supabase.from("adoption_applications").select("id, status, decision_date, impound_record_id"),
         supabase.from("shelter_settings").select("kennel_capacity").eq("id", true).maybeSingle(),
       ]);
@@ -64,9 +64,7 @@ export function SummaryCards({ onOpen }: SummaryCardsProps) {
       setShelter({
         occupied: activeImpounds.filter((impound) => impound.status === "kennel" || impound.status === "reserved").length,
         capacity,
-        kennel: activeImpounds.filter((impound) => impound.status === "kennel").length,
-        foster: activeImpounds.filter((impound) => impound.status === "foster").length,
-        reserved: activeImpounds.filter((impound) => impound.status === "reserved").length,
+        forAdoption: activeImpounds.filter((impound) => impound.impound_status === "impounded" && impound.adoption_status === "available").length,
         longest: activeImpounds.map((impound) => ({
           id: impound.id,
           name: impound.name,
@@ -137,20 +135,9 @@ export function SummaryCards({ onOpen }: SummaryCardsProps) {
             </p>
           </div>
 
-          <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-1 sm:gap-1">
-            {[
-              { label: "In kennel", value: shelter.kennel },
-              { label: "Foster", value: shelter.foster },
-              { label: "Reserved", value: shelter.reserved },
-            ].map((row) => (
-              <div
-                key={row.label}
-                className="flex items-center justify-between rounded-lg bg-secondary/60 px-2 py-1.5"
-              >
-                <span className="text-[10.5px] text-muted-foreground">{row.label}</span>
-                <span className="num text-[11.5px] font-bold text-foreground">{loading ? "—" : row.value}</span>
-              </div>
-            ))}
+          <div className="flex items-center justify-between self-start rounded-lg bg-secondary/60 px-2 py-1.5">
+            <span className="text-[10.5px] text-muted-foreground">For Adoption</span>
+            <span className="num text-[11.5px] font-bold text-foreground">{loading ? "—" : shelter.forAdoption}</span>
           </div>
         </div>
 

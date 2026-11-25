@@ -20,7 +20,10 @@ const toneMap: Record<Tone, string> = {
 
 export function MetricStrip({ metrics }: { metrics: Metric[] }) {
   return (
-    <section className="surface-card fade-up mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border/70 sm:mt-5 lg:grid-cols-4">
+    <section className={cn(
+      "surface-card fade-up mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border/70 sm:mt-5",
+      metrics.length === 3 ? "sm:grid-cols-3" : "lg:grid-cols-4",
+    )}>
       {metrics.map((metric) => {
         const Icon = metric.icon;
         return (

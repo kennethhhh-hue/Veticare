@@ -298,6 +298,7 @@ const PersonnelApp = () => {
             ? `${vaccination.vaccine_name} · ${formatCalendarDate(vaccination.administered_on)}`
             : vaccinationResult.error ? "Vaccination records unavailable" : "No vaccination record linked",
           lastVaccinatedOn: vaccination?.administered_on,
+          photoUrl: pet.photo_url ?? undefined,
           rfidTag: pet.rfid_tag,
           qrCode: pet.qr_code,
         };

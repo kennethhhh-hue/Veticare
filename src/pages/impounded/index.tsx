@@ -3,8 +3,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   Clock,
   HeartHandshake,
-  Home,
-  MoreHorizontal,
   PawPrint,
   Plus,
   RefreshCw,
@@ -17,21 +15,21 @@ import { AppShell } from "@/components/veticare/app-shell";
 import { PageHeader } from "@/components/admin/page-header";
 import { MetricStrip } from "@/components/admin/metric-strip";
 import { FilterSelect } from "@/components/admin/filter-select";
-import { StatusPill } from "@/components/admin/status-pill";
 import { Pagination } from "@/components/admin/pagination";
 import { PersonnelImpoundReports } from "@/components/admin/personnel-impound-reports";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
@@ -39,11 +37,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
   type ImpoundedDog,
@@ -54,11 +47,17 @@ import { sidebarCountKeys } from "@/data/veticare";
 
 const PAGE_SIZE = 5;
 
-const statusLabel: Record<ImpoundStatus, string> = {
-  kennel: "In kennel",
-  foster: "In foster",
-  reserved: "Reserved",
+const adoptionLabel = {
+  not_available: "Not available",
+  available: "For Adoption",
+  pending: "Pending",
+  adopted: "Adopted",
 };
+
+const getAdoptionLabel = (dog: ImpoundedDog) =>
+  dog.adoptionStatus === "available" && dog.impoundStatus !== "impounded"
+    ? adoptionLabel.not_available
+    : adoptionLabel[dog.adoptionStatus];
 
 const initials = (name: string) =>
   name
@@ -132,6 +131,8 @@ const ImpoundedDogs = () => {
   const [selected, setSelected] = useState<ImpoundedDog | null>(null);
   const [intakeOpen, setIntakeOpen] = useState(false);
   const [savingIntake, setSavingIntake] = useState(false);
+  const [adoptionUpdateId, setAdoptionUpdateId] = useState<string | null>(null);
+  const [adoptedTarget, setAdoptedTarget] = useState<ImpoundedDog | null>(null);
   const [intake, setIntake] = useState({ name: "", type: "Dog" as "Dog" | "Cat", breed: "", sex: "Male" as "Male" | "Female", age: "", color: "", date: new Date().toISOString().slice(0, 10), location: "" });
 
   const loadImpounds = useCallback(async () => {
@@ -193,20 +194,37 @@ const ImpoundedDogs = () => {
     toast.success("Impound list refreshed from Supabase.");
   };
 
-  const moveTo = async (dog: ImpoundedDog, next: ImpoundStatus) => {
-    const impoundStatus = next === "reserved" ? "claimed" : "impounded";
-    const adoptionStatus = next === "reserved" ? "pending" : "available";
-    const { error } = await supabase.from("impounds").update({ status: next, impound_status: impoundStatus, adoption_status: adoptionStatus }).eq("id", dog.id);
+  const refreshIntakes = () => {
+    void loadImpounds();
+    void queryClient.invalidateQueries({ queryKey: sidebarCountKeys.impounded });
+  };
+
+  const updateAdoptionStatus = async (dog: ImpoundedDog, next: "available" | "adopted") => {
+    setAdoptionUpdateId(dog.id);
+    const { data, error } = await supabase.from("impounds")
+      .update({ adoption_status: next, ...(next === "adopted" ? { impound_status: "released" } : {}) })
+      .eq("id", dog.id)
+      .eq("impound_status", "impounded")
+      .eq("adoption_status", dog.adoptionStatus)
+      .select("*")
+      .maybeSingle();
+    setAdoptionUpdateId(null);
     if (error) {
       toast.error(error.message);
       return;
     }
-    setRows((prev) => prev.map((item) => (item.id === dog.id ? { ...item, status: next, impoundStatus, adoptionStatus } : item)));
-    setSelected((current) => (current && current.id === dog.id ? { ...current, status: next, impoundStatus, adoptionStatus } : current));
+    if (!data) {
+      toast.error("The record changed. Review its current adoption status before trying again.");
+      setAdoptedTarget(null);
+      refreshIntakes();
+      return;
+    }
+    const record = mapImpoundRow(data);
+    setRows((current) => current.map((item) => item.id === record.id ? record : item));
+    setSelected((current) => current?.id === record.id ? record : current);
+    setAdoptedTarget(null);
     void queryClient.invalidateQueries({ queryKey: sidebarCountKeys.impounded });
-    toast.success(`${dog.name} moved to ${statusLabel[next].toLowerCase()}`, {
-      description: `Kennel ${dog.kennel} is up to date in the shelter log.`,
-    });
+    toast.success(next === "adopted" ? `${dog.name} was marked adopted.` : `${dog.name} is now listed for adoption.`);
   };
 
   const logImpound = async (event: FormEvent<HTMLFormElement>) => {
@@ -225,6 +243,7 @@ const ImpoundedDogs = () => {
       color: intake.color.trim(),
       area: intake.location.trim(),
       impounded_at: intake.date,
+      adoption_status: "not_available",
       notes: "",
     }).select("*").single();
     setSavingIntake(false);
@@ -262,22 +281,14 @@ const ImpoundedDogs = () => {
       tone: "primary" as const,
     },
     {
-      label: "In kennel",
-      value: rows.filter((dog) => dog.status === "kennel").length,
-      hint: "City pound",
-      icon: Home,
-      tone: "info" as const,
-    },
-    {
-      label: "In foster",
-      value: rows.filter((dog) => dog.status === "foster").length,
-      hint: "Volunteer homes",
+      label: "For Adoption",
+      value: rows.filter((dog) => dog.impoundStatus === "impounded" && dog.adoptionStatus === "available").length,
       icon: HeartHandshake,
       tone: "warning" as const,
     },
     {
       label: "Longest stay",
-      value: `${Math.max(...rows.map((dog) => dog.days))}d`,
+      value: `${Math.max(0, ...rows.map((dog) => dog.days))}d`,
       hint: "Needs a home",
       icon: Clock,
       tone: "neutral" as const,
@@ -303,7 +314,7 @@ const ImpoundedDogs = () => {
 
       <MetricStrip metrics={metrics} />
 
-      <PersonnelImpoundReports />
+      <PersonnelImpoundReports onReviewed={refreshIntakes} />
 
       <section className="surface-card fade-up mt-4 overflow-hidden rounded-2xl border border-border bg-card sm:mt-5">
         <div className="flex flex-col gap-2.5 p-3.5 sm:p-4 lg:flex-row lg:flex-wrap lg:items-center">
@@ -408,7 +419,7 @@ const ImpoundedDogs = () => {
         ) : null}
 
         <div className="hidden border-y border-border bg-secondary/40 px-5 py-2 xl:grid xl:grid-cols-[minmax(0,1.5fr)_88px_80px_minmax(0,0.9fr)_100px_100px_140px] xl:gap-4">
-            {["Animal / IDs", "Type / sex", "Color", "Location found", "Date impounded", "Impound status", "Adoption / action"].map((label) => (
+            {["Animal / IDs", "Type / sex", "Color", "Location found", "Date impounded", "Impound status", "Adoption"].map((label) => (
             <p
               key={label}
               className="text-[9px] font-bold uppercase tracking-[0.12em] text-muted-foreground"
@@ -522,56 +533,45 @@ const ImpoundedDogs = () => {
                   <span className="rounded-full bg-secondary px-2 py-1 text-[9px] font-bold capitalize text-foreground">{dog.impoundStatus}</span>
                 </div>
 
-                <div onClick={(event) => event.stopPropagation()} className="order-4 col-span-2 flex items-center justify-end gap-1 xl:order-none xl:col-span-1 xl:justify-start">
-                  <span className="rounded-full bg-primary-soft px-2 py-1 text-[9px] font-bold capitalize text-primary">{dog.adoptionStatus}</span>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        size="icon"
-                        variant="outline"
-                        className="size-7 rounded-lg border-border text-muted-foreground hover:border-primary/30 hover:text-primary"
-                        aria-label={`Change status for ${dog.name}`}
-                      >
-                        <MoreHorizontal className="size-3.5" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-[196px] rounded-xl border-border p-1.5 shadow-raised">
-                      <DropdownMenuLabel className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-                        Move {dog.name}
-                      </DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      {(Object.keys(statusLabel) as ImpoundStatus[]).map((key) => (
-                        <DropdownMenuItem
-                          key={key}
-                          disabled={dog.status === key}
-                          onSelect={() => moveTo(dog, key)}
-                          className="gap-2 rounded-lg text-[12px]"
-                        >
-                          {statusLabel[key]}
-                          {dog.status === key ? (
-                            <span className="ml-auto text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
-                              Current
-                            </span>
-                          ) : null}
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        size="icon"
-                        variant="outline"
-                        onClick={() => void toggleVaccinated(dog)}
-                        className="size-7 rounded-lg border-border text-muted-foreground hover:border-primary/30 hover:text-primary"
-                        aria-label={`Vaccination record for ${dog.name}`}
-                      >
-                        <Syringe className="size-3.5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Vaccination record</TooltipContent>
-                  </Tooltip>
+                <div className="order-4 col-span-2 flex flex-wrap items-center justify-end gap-1 xl:order-none xl:col-span-1 xl:justify-start">
+                  {dog.impoundStatus === "impounded" && dog.adoptionStatus === "not_available" ? (
+                    <Button
+                      size="sm"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void updateAdoptionStatus(dog, "available");
+                      }}
+                      disabled={adoptionUpdateId !== null}
+                      aria-label={`List ${dog.name} for adoption`}
+                      className="h-7 rounded-lg px-2.5 text-[10px] font-bold"
+                    >
+                      {adoptionUpdateId === dog.id ? "Saving…" : "For Adoption"}
+                    </Button>
+                  ) : (
+                    <span className={cn(
+                      "rounded-full px-2 py-1 text-[9px] font-bold",
+                      dog.adoptionStatus === "available" && dog.impoundStatus === "impounded"
+                        ? "bg-primary-soft text-primary"
+                        : "bg-secondary text-muted-foreground",
+                    )}>
+                      {getAdoptionLabel(dog)}
+                    </span>
+                  )}
+                  {dog.impoundStatus === "impounded" && (dog.adoptionStatus === "not_available" || dog.adoptionStatus === "available") ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setAdoptedTarget(dog);
+                      }}
+                      disabled={adoptionUpdateId !== null}
+                      aria-label={`Mark ${dog.name} as adopted`}
+                      className="h-7 rounded-lg px-2.5 text-[10px] font-bold"
+                    >
+                      Adopted
+                    </Button>
+                  ) : null}
                 </div>
               </li>
             ))}
@@ -617,7 +617,6 @@ const ImpoundedDogs = () => {
 
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
-                  <StatusPill status={selected.status} />
                   <span className="num rounded-full bg-secondary px-2 py-1 text-[10px] font-semibold text-secondary-foreground">
                     {selected.days} days in care
                   </span>
@@ -633,7 +632,7 @@ const ImpoundedDogs = () => {
                     { label: "Date impounded", value: selected.dateImpounded },
                     { label: "Location found", value: selected.locationFound },
                     { label: "Impound status", value: selected.impoundStatus },
-                    { label: "Adoption status", value: selected.adoptionStatus },
+                    { label: "Adoption status", value: getAdoptionLabel(selected) },
                     {
                       label: "Vaccination",
                       value: selected.vaccinated ? "Up to date" : "Not vaccinated",
@@ -661,13 +660,12 @@ const ImpoundedDogs = () => {
 
                 <div className="flex flex-col gap-2">
                   <Button
-                    onClick={() => moveTo(selected, "kennel")}
-                    disabled={selected.impoundStatus === "impounded" && selected.adoptionStatus === "available"}
-                    className="h-10 w-full rounded-xl text-[12px] font-bold shadow-glow"
+                    variant="outline"
+                    onClick={() => void toggleVaccinated(selected)}
+                    className="h-10 w-full rounded-xl border-border text-[12px] font-semibold"
                   >
-                    {selected.impoundStatus === "impounded" && selected.adoptionStatus === "available"
-                      ? "Available for adoption"
-                      : "Put on adoption"}
+                    <Syringe className="size-4" />
+                    {selected.vaccinated ? "Mark as not vaccinated" : "Mark as vaccinated"}
                   </Button>
                   <Button
                     variant="outline"
@@ -682,6 +680,21 @@ const ImpoundedDogs = () => {
           ) : null}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={adoptedTarget !== null} onOpenChange={(open) => { if (!open && adoptionUpdateId === null) setAdoptedTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mark {adoptedTarget?.name} as adopted?</AlertDialogTitle>
+            <AlertDialogDescription>This records the animal as released and removes it from the adoption listings.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={adoptionUpdateId !== null}>Cancel</AlertDialogCancel>
+            <Button disabled={adoptionUpdateId !== null || !adoptedTarget} onClick={() => { if (adoptedTarget) void updateAdoptionStatus(adoptedTarget, "adopted"); }}>
+              {adoptionUpdateId === null ? "Mark as adopted" : "Saving…"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={intakeOpen} onOpenChange={setIntakeOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto rounded-xl border-border bg-card sm:max-w-[560px]">

@@ -170,7 +170,7 @@ const Reports = () => {
       rows = result.data ?? [];
       fetchError = result.error?.message ?? null;
     } else if (genCategory === "Impounded Dogs") {
-      const result = await supabase.from("impounds").select("id, impound_id, pet_id, animal_type, name, breed, sex, age, color, area, kennel, impounded_at, impound_status, adoption_status, status, vaccinated, notes, created_at");
+      const result = await supabase.from("impounds").select("id, impound_id, pet_id, animal_type, name, breed, sex, age, color, area, kennel, impounded_at, impound_status, adoption_status, vaccinated, notes, created_at");
       rows = result.data ?? [];
       fetchError = result.error?.message ?? null;
     } else if (genCategory === "Adoptions") {
