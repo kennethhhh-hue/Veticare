@@ -854,15 +854,6 @@ const ImpoundedDogs = () => {
                   ))}
                 </div>
 
-                <div className="rounded-xl border border-border bg-secondary/40 p-3">
-                  <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-                    Field notes
-                  </p>
-                  <p className="mt-1 text-[10.5px] leading-relaxed text-foreground/85">
-                    {selected.notes}
-                  </p>
-                </div>
-
                 <div className="flex flex-col gap-2">
                   {claimOpen ? (
                     <ImpoundClaimForm
