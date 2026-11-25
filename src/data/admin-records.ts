@@ -15,7 +15,6 @@ export interface PetRegistration {
   phone: string;
   ownerId?: string;
   petId?: string | null;
-  rfidTag?: string | null;
   qrCode?: string | null;
   ownerPetKey?: string;
   registered: string;

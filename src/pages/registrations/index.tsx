@@ -1,15 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  AlertCircle,
   Check,
-  CircleCheck,
-  Cpu,
   Pencil,
   PawPrint,
   Phone,
+  QrCode,
   RefreshCw,
-  ScanLine,
   Search,
   SlidersHorizontal,
   Venus,
@@ -57,7 +54,7 @@ const Registrations = () => {
   const [query, setQuery] = useState("");
   const [species, setSpecies] = useState("all");
   const [status, setStatus] = useState("all");
-  const [rfidFilter, setRfidFilter] = useState("all");
+  const [qrFilter, setQrFilter] = useState("all");
   const [draftsOnly, setDraftsOnly] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
@@ -67,12 +64,7 @@ const Registrations = () => {
   const [savingDetails, setSavingDetails] = useState(false);
   const [detailDraft, setDetailDraft] = useState({ name: "", species: "Dog" as "Dog" | "Cat", breed: "", gender: "Male" as "Male" | "Female", age: "", weight: "", color: "" });
   const [issuePetId, setIssuePetId] = useState("");
-  const [issueRfid, setIssueRfid] = useState("");
-  const [rfidScanStatus, setRfidScanStatus] = useState<"idle" | "waiting" | "checking" | "available" | "duplicate" | "error">("idle");
-  const [rfidScanMessage, setRfidScanMessage] = useState("");
   const [savingApproval, setSavingApproval] = useState(false);
-  const rfidInputRef = useRef<HTMLInputElement>(null);
-  const rfidScanTimerRef = useRef<number | null>(null);
 
   const loadRegistry = useCallback(async () => {
     setLoading(true);
@@ -113,7 +105,6 @@ const Registrations = () => {
         owner: owner?.full_name || owner?.email || "Pet owner",
         phone: owner?.phone || "—",
         petId: pet.pet_id,
-        rfidTag: pet.rfid_tag,
         qrCode: pet.qr_code,
         registered: new Date(pet.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }),
         registeredAt: pet.created_at.slice(0, 10),
@@ -126,10 +117,7 @@ const Registrations = () => {
   useEffect(() => {
     void loadRegistry();
     window.addEventListener("focus", loadRegistry);
-    return () => {
-      window.removeEventListener("focus", loadRegistry);
-      if (rfidScanTimerRef.current !== null) window.clearTimeout(rfidScanTimerRef.current);
-    };
+    return () => window.removeEventListener("focus", loadRegistry);
   }, [loadRegistry]);
 
   const pendingCount = rows.filter((row) => row.status === "pending").length;
@@ -143,18 +131,18 @@ const Registrations = () => {
         `${row.name} ${row.breed} ${row.owner} ${row.id}`.toLowerCase().includes(search);
       const matchesSpecies = species === "all" || row.species === species;
       const matchesStatus = status === "all" || row.status === status;
-      const matchesRfid =
-        rfidFilter === "all" || (rfidFilter === "assigned" ? Boolean(row.rfidTag) : !row.rfidTag);
+      const matchesQr =
+        qrFilter === "all" || (qrFilter === "assigned" ? Boolean(row.qrCode) : !row.qrCode);
       const matchesDraft = !draftsOnly || Boolean(row.isDraft);
       return (
         matchesQuery &&
         matchesSpecies &&
         matchesStatus &&
-        matchesRfid &&
+        matchesQr &&
         matchesDraft
       );
     });
-  }, [rows, query, species, status, rfidFilter, draftsOnly]);
+  }, [rows, query, species, status, qrFilter, draftsOnly]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
@@ -170,7 +158,7 @@ const Registrations = () => {
     setQuery("");
     setSpecies("all");
     setStatus("all");
-    setRfidFilter("all");
+    setQrFilter("all");
     setDraftsOnly(false);
     setPage(1);
     void loadRegistry();
@@ -183,9 +171,6 @@ const Registrations = () => {
     const petId = row.petId || `VC-${new Date().getFullYear()}-${suffix}`;
     setIssueTarget(row);
     setIssuePetId(petId);
-    setIssueRfid("");
-    setRfidScanStatus("idle");
-    setRfidScanMessage("");
   };
 
   const openRegistrationDetails = (row: PetRegistration) => {
@@ -239,108 +224,35 @@ const Registrations = () => {
     toast.success("Pet profile updated.");
   };
 
-  const validateScannedRfid = async (value: string) => {
-    const uid = value.trim();
-    if (!uid || !issueTarget) return;
-    setRfidScanStatus("checking");
-    setRfidScanMessage("Checking whether this RFID is available...");
-    const { data, error } = await supabase.rpc("find_rfid_tag_assignment", {
-      p_rfid_tag: uid,
-      p_exclude_pet_id: issueTarget.id,
-    });
-    if (error) {
-      const { data: assignedTags, error: lookupError } = await supabase
-        .from("pets")
-        .select("id, name, rfid_tag")
-        .not("rfid_tag", "is", null);
-      if (lookupError) {
-        setRfidScanStatus("error");
-        setRfidScanMessage(`Unable to verify this tag: ${lookupError.message}`);
-        return;
-      }
-      const normalizedUid = uid.replace(/[\s-]/g, "").toLowerCase();
-      const duplicate = assignedTags?.find((pet) =>
-        pet.id !== issueTarget.id &&
-        (pet.rfid_tag ?? "").replace(/[\s-]/g, "").toLowerCase() === normalizedUid,
-      );
-      if (duplicate) {
-        setRfidScanStatus("duplicate");
-        setRfidScanMessage(`This RFID is already assigned to ${duplicate.name}. Scan a different tag.`);
-        return;
-      }
-      setRfidScanStatus("available");
-      setRfidScanMessage("RFID detected and available. Database-side duplicate index is recommended.");
-      return;
-    }
-    if (data?.length) {
-      setRfidScanStatus("duplicate");
-      setRfidScanMessage(`This RFID is already assigned to ${data[0].pet_name}. Scan a different tag.`);
-      return;
-    }
-    setRfidScanStatus("available");
-    setRfidScanMessage("RFID Tag Successfully Detected! This tag is available.");
-  };
+  const issueQrAndApprove = async () => {
+    const petId = issuePetId.trim();
+    if (!issueTarget || !petId || savingApproval) return;
 
-  const startRfidScan = () => {
-    if (rfidScanTimerRef.current !== null) window.clearTimeout(rfidScanTimerRef.current);
-    setIssueRfid("");
-    setRfidScanMessage("Waiting for RFID Tag…");
-    setRfidScanStatus("waiting");
-    window.setTimeout(() => rfidInputRef.current?.focus(), 0);
-  };
-
-  const handleRfidInput = (value: string) => {
-    setIssueRfid(value.slice(0, 64));
-    setRfidScanStatus("waiting");
-    setRfidScanMessage("RFID data received. Verifying reader scan...");
-    if (rfidScanTimerRef.current !== null) window.clearTimeout(rfidScanTimerRef.current);
-    rfidScanTimerRef.current = window.setTimeout(() => {
-      void validateScannedRfid(value);
-    }, 700);
-  };
-
-  const handleRfidKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Enter") {
-      if (!event.currentTarget.value.trim()) return;
-      event.preventDefault();
-      if (rfidScanTimerRef.current !== null) window.clearTimeout(rfidScanTimerRef.current);
-      void validateScannedRfid(event.currentTarget.value);
-    }
-  };
-
-  const issueIdentifiersAndApprove = async () => {
-    if (!issueTarget || !issuePetId.trim() || !issueRfid.trim() || rfidScanStatus !== "available") return;
     setSavingApproval(true);
-    const { error } = await supabase.from("pets").update({
+    const { data, error } = await supabase.from("pets").update({
       status: "approved",
-      pet_id: issuePetId.trim(),
-      rfid_tag: issueRfid.trim(),
-      qr_code: issuePetId.trim(),
-    }).eq("id", issueTarget.id);
+      pet_id: petId,
+      qr_code: petId,
+    }).eq("id", issueTarget.id).eq("status", "pending").select("id").maybeSingle();
+    setSavingApproval(false);
+
     if (error) {
-      setSavingApproval(false);
-      if (error.code === "23505") {
-        const duplicateRfid = error.message.includes("rfid_tag");
-        const duplicatePetId = error.message.includes("pet_id") || error.message.includes("qr_code");
-        if (duplicateRfid) {
-          setRfidScanStatus("duplicate");
-          setRfidScanMessage("This RFID is already assigned to another pet. Scan a different tag.");
-        } else if (duplicatePetId) {
-          setRfidScanStatus("error");
-          setRfidScanMessage("This Pet ID or QR value is already assigned. Refresh the Pet ID and try again.");
-        } else {
-          setRfidScanStatus("error");
-          setRfidScanMessage("A related database record conflicts with this approval. Apply the latest Supabase migration, then retry.");
-        }
-      }
-      toast.error(error.message);
+      const duplicateIdentifier = error.code === "23505" && /pet_id|qr_code/.test(error.message);
+      toast.error(duplicateIdentifier ? "This Pet ID or QR code is already assigned. Enter a unique Pet ID and try again." : error.message);
       return;
     }
-    setSavingApproval(false);
-    toast.success(`${issueTarget.name} approved and identifiers issued.`, {
-      description: `Pet ID and QR ${issuePetId.trim()} • RFID ${issueRfid.trim()}. Owner notified to pick up the collar at OCVAS.`,
+    if (!data) {
+      toast.error("This registration is no longer pending. Refresh the list to see its current status.");
+      return;
+    }
+
+    toast.success(`${issueTarget.name} approved and QR code issued.`, {
+      description: `Pet ID ${petId} is available in the owner app.`,
     });
     setIssueTarget(null);
+    setDetailTarget((current) => current?.id === issueTarget.id
+      ? { ...current, status: "approved", petId, qrCode: petId }
+      : current);
     void queryClient.invalidateQueries({ queryKey: sidebarCountKeys.registrations });
     await loadRegistry();
   };
@@ -383,10 +295,10 @@ const Registrations = () => {
       tone: "warning" as const,
     },
     {
-      label: "RFID assigned",
-      value: rows.filter((row) => row.rfidTag).length,
-      hint: `${rows.filter((row) => !row.rfidTag).length} not assigned`,
-      icon: Cpu,
+      label: "QR codes issued",
+      value: rows.filter((row) => row.qrCode).length,
+      hint: `${rows.filter((row) => !row.qrCode).length} not assigned`,
+      icon: QrCode,
       tone: "neutral" as const,
     },
   ];
@@ -396,7 +308,7 @@ const Registrations = () => {
       <PageHeader
         eyebrow="Operations"
         title="Pet Registration"
-        description="Review owner submissions, assign RFID tags, and issue QR codes."
+        description="Review owner submissions and issue Pet IDs with QR codes."
         actions={
           <>
             <Button
@@ -466,9 +378,9 @@ const Registrations = () => {
             />
             <FilterSelect
               className="col-span-2 sm:col-auto"
-              label="RFID"
-              value={rfidFilter}
-              onChange={resetPage(setRfidFilter)}
+              label="QR code"
+              value={qrFilter}
+              onChange={resetPage(setQrFilter)}
               options={[
                 { value: "all", label: "All" },
                 { value: "assigned", label: "Assigned" },
@@ -524,7 +436,7 @@ const Registrations = () => {
         ) : null}
 
         <div className="hidden border-y border-border bg-secondary/40 px-5 py-2 xl:grid xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1.05fr)_minmax(0,1.05fr)_minmax(0,0.85fr)_104px_116px] xl:gap-4">
-          {["Pet", "Owner", "RFID / QR", "Registered", "Status", "Action"].map((label) => (
+          {["Pet", "Owner", "Pet ID / QR", "Registered", "Status", "Action"].map((label) => (
             <p
               key={label}
               className="text-[9px] font-bold uppercase tracking-[0.12em] text-muted-foreground"
@@ -626,10 +538,7 @@ const Registrations = () => {
 
                 <div className="order-3 col-span-1 min-w-0 xl:order-none">
                   <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-muted-foreground xl:hidden">
-                    RFID / QR
-                  </p>
-                  <p className="num truncate text-[10.5px] font-medium text-foreground/85">
-                    RFID: {row.rfidTag ?? "Not issued"}
+                    Pet ID / QR
                   </p>
                   <p className="num mt-0.5 truncate text-[9px] text-muted-foreground/75">Pet: {row.petId ?? row.id} • QR: {row.qrCode ?? "Not issued"}</p>
                 </div>
@@ -659,7 +568,7 @@ const Registrations = () => {
                             <Check className="size-3.5" strokeWidth={2.6} />
                           </Button>
                         </TooltipTrigger>
-                        <TooltipContent>Assign Pet ID, RFID and QR, then approve</TooltipContent>
+                        <TooltipContent>Issue Pet ID and QR code, then approve</TooltipContent>
                       </Tooltip>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -741,12 +650,12 @@ const Registrations = () => {
         }}
       />
 
-      <Dialog open={Boolean(issueTarget)} onOpenChange={(open) => { if (!open) setIssueTarget(null); }}>
+      <Dialog open={Boolean(issueTarget)} onOpenChange={(open) => { if (!open && !savingApproval) setIssueTarget(null); }}>
         <DialogContent className="rounded-xl border-border bg-card sm:max-w-[480px]">
           <DialogHeader>
-            <DialogTitle>Scan RFID and approve</DialogTitle>
+            <DialogTitle>Issue QR code and approve</DialogTitle>
             <DialogDescription>
-              {issueTarget ? `Review ${issueTarget.name}, scan the collar's RFID tag, and approve the registration.` : "Scan the collar RFID tag to approve this pet."}
+              {issueTarget ? `Review ${issueTarget.name} and issue the QR code when approving the registration.` : "Issue the QR code and approve the registration."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -755,73 +664,14 @@ const Registrations = () => {
               <Input id="admin-pet-id" value={issuePetId} onChange={(event) => setIssuePetId(event.target.value)} maxLength={40} />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="admin-rfid">Collar RFID tag</Label>
-              <Input
-                id="admin-rfid"
-                ref={rfidInputRef}
-                autoFocus
-                value={issueRfid}
-                onFocus={() => {
-                  if (rfidScanStatus !== "waiting" && rfidScanStatus !== "checking") startRfidScan();
-                }}
-                onChange={(event) => handleRfidInput(event.target.value)}
-                onKeyDown={handleRfidKeyDown}
-                maxLength={64}
-                placeholder="Start scanning, then present the keytag"
-                aria-describedby="rfid-scan-status rfid-scan-help"
-              />
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  type="button"
-                  variant={rfidScanStatus === "available" ? "outline" : "default"}
-                  onClick={startRfidScan}
-                  className="h-8 rounded-lg px-2.5 text-[10px] font-bold"
-                >
-                  {rfidScanStatus === "waiting" || rfidScanStatus === "checking" ? (
-                    <RefreshCw className="size-3.5 animate-spin" />
-                  ) : rfidScanStatus === "available" || rfidScanStatus === "duplicate" || rfidScanStatus === "error" ? (
-                    <RefreshCw className="size-3.5" />
-                  ) : (
-                    <ScanLine className="size-3.5" />
-                  )}
-                  {rfidScanStatus === "waiting" || rfidScanStatus === "checking" ? "Scanning..." : rfidScanStatus === "available" || rfidScanStatus === "duplicate" || rfidScanStatus === "error" ? "Scan Again" : "Start Scanning"}
-                </Button>
-                <span
-                  id="rfid-scan-status"
-                  role="status"
-                  aria-live="polite"
-                  className={cn(
-                    "flex items-center gap-1.5 text-[10px] font-semibold",
-                    rfidScanStatus === "duplicate" || rfidScanStatus === "error"
-                      ? "text-destructive"
-                      : rfidScanStatus === "available"
-                        ? "text-success"
-                        : "text-muted-foreground",
-                  )}
-                >
-                  {rfidScanStatus === "waiting" ? <span className="size-2 animate-pulse rounded-full bg-primary" /> : null}
-                  {rfidScanStatus === "available" ? <CircleCheck className="size-3.5" /> : null}
-                  {rfidScanStatus === "duplicate" || rfidScanStatus === "error" ? <AlertCircle className="size-3.5" /> : null}
-                  {rfidScanMessage || "Click Start Scanning, then present the keytag to the USB reader."}
-                </span>
-              </div>
-              {issueRfid ? (
-                <div className="rounded-lg border border-border bg-secondary/40 px-2.5 py-2">
-                  <p className="text-[8px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Scanned RFID UID</p>
-                  <p className="num mt-0.5 break-all text-[12px] font-bold text-foreground">{issueRfid}</p>
-                </div>
-              ) : null}
-              <p id="rfid-scan-help" className="text-[9px] leading-relaxed text-muted-foreground">Use a USB RFID reader configured as a keyboard. Keep this field focused; the reader's UID is captured automatically.</p>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="admin-qr-value">Pet ID / QR code</Label>
-              <Input id="admin-qr-value" value={issuePetId} readOnly />
-              <p className="text-[9px] text-muted-foreground">A scannable QR code containing this Pet ID is added to the owner's digital ID after approval.</p>
+              <p className="text-[11px] font-semibold text-foreground">QR code preview</p>
+              {issuePetId.trim() ? <QRCodeSVG value={issuePetId.trim()} size={100} level="M" marginSize={2} className="rounded bg-white" title="Pet ID QR code preview" /> : null}
+              <p className="text-[9px] text-muted-foreground">This QR code is added to the owner's digital Pet ID after approval.</p>
             </div>
             <div className="flex justify-end gap-2 pt-1">
-              <Button type="button" variant="outline" onClick={() => setIssueTarget(null)}>Cancel</Button>
-              <Button type="button" onClick={issueIdentifiersAndApprove} disabled={!issuePetId.trim() || !issueRfid.trim() || rfidScanStatus !== "available" || savingApproval}>
-                <Check className="size-4" />{savingApproval ? "Approving..." : "Issue identifiers & approve"}
+              <Button type="button" variant="outline" disabled={savingApproval} onClick={() => setIssueTarget(null)}>Cancel</Button>
+              <Button type="button" onClick={issueQrAndApprove} disabled={!issuePetId.trim() || savingApproval}>
+                <Check className="size-4" />{savingApproval ? "Approving..." : "Issue QR & approve"}
               </Button>
             </div>
           </div>
@@ -890,7 +740,6 @@ const Registrations = () => {
                       ["Contact", detailTarget.phone],
                       ["Submitted", detailTarget.registered],
                       ["Pet ID", detailTarget.petId || "Assigned on approval"],
-                      ["RFID", detailTarget.rfidTag || "Scan during approval"],
                     ].map(([label, value]) => (
                       <div key={label} className="min-w-0 rounded-lg bg-secondary/60 p-2.5">
                         <dt className="text-[9px] font-bold uppercase text-muted-foreground">{label}</dt>
@@ -920,7 +769,7 @@ const Registrations = () => {
               )}
               {detailTarget.status === "pending" ? (
                 !editingDetails ? <Button className="w-full" onClick={() => { beginApproval(detailTarget); setDetailTarget(null); }}>
-                  <Check className="size-4" />Scan RFID and approve
+                  <Check className="size-4" />Issue QR code and approve
                 </Button> : null
               ) : null}
             </div>

@@ -33,7 +33,7 @@ import { cn } from "@/lib/utils";
 import { type PetIdRecord, type PetIdStatus } from "@/data/shelter-records";
 import { supabase } from "@/integrations/supabase/client";
 
-type RegistryPetIdRecord = PetIdRecord & { recordId: string; rfidTag: string | null };
+type RegistryPetIdRecord = PetIdRecord & { recordId: string };
 
 const PAGE_SIZE = 5;
 
@@ -56,7 +56,7 @@ const PetId = () => {
     setLoading(true);
     setLoadError(null);
     const [{ data: pets, error: petsError }, { data: profiles, error: profilesError }] = await Promise.all([
-      supabase.from("pets").select("id, owner_id, name, species, breed, pet_id, rfid_tag, status, pet_id_status, pet_id_issued_at, pet_id_valid_through").in("status", ["pending", "approved"]).order("created_at", { ascending: false }),
+      supabase.from("pets").select("id, owner_id, name, species, breed, pet_id, status, pet_id_status, pet_id_issued_at, pet_id_valid_through").in("status", ["pending", "approved"]).order("created_at", { ascending: false }),
       supabase.from("profiles").select("id, full_name, email, barangay").eq("role", "owner"),
     ]);
     const error = petsError ?? profilesError;
@@ -78,7 +78,6 @@ const PetId = () => {
       return {
         recordId: pet.id,
         id: pet.pet_id || `Pending • ${pet.id.slice(0, 8)}`,
-        rfidTag: pet.rfid_tag,
         pet: pet.name,
         species: pet.species as "Dog" | "Cat",
         breed: pet.breed,
@@ -103,7 +102,7 @@ const PetId = () => {
     return records.filter((record) => {
       const matchesQuery =
         search.length === 0 ||
-        `${record.id} ${record.rfidTag ?? ""} ${record.pet} ${record.owner} ${record.barangay} ${record.breed}`
+        `${record.id} ${record.pet} ${record.owner} ${record.barangay} ${record.breed}`
           .toLowerCase()
           .includes(search);
       const matchesStatus = status === "all" || record.status === status;
@@ -150,7 +149,7 @@ const PetId = () => {
     await loadRegistry();
     setIssueOpen(false);
     setRecordToIssue("");
-    toast.success(`Pet ID assigned to ${pending.pet}.`, { description: "It becomes active after RFID assignment and admin approval." });
+    toast.success(`Pet ID assigned to ${pending.pet}.`, { description: "It becomes active after admin approval." });
   };
 
   const copyId = async (id: string) => {
@@ -221,7 +220,7 @@ const PetId = () => {
             <Input
               value={query}
               onChange={(event) => resetPage(setQuery)(event.target.value)}
-              placeholder="Search Pet ID, RFID, pet, or owner…"
+              placeholder="Search Pet ID, pet, or owner…"
               aria-label="Search pet IDs"
               className="h-9 rounded-xl border-border bg-background pl-9 text-[12px] focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-0"
             />
@@ -598,7 +597,7 @@ const PetId = () => {
         <DialogContent className="rounded-xl border-border bg-card sm:max-w-[440px]">
           <DialogHeader>
             <DialogTitle>Generate Pet ID</DialogTitle>
-            <DialogDescription>Assign a Pet ID and matching QR value. The ID becomes active after RFID assignment and admin approval.</DialogDescription>
+            <DialogDescription>Assign a Pet ID and matching QR value. The ID becomes active after admin approval.</DialogDescription>
           </DialogHeader>
           {records.some((record) => record.status === "pending") ? (
             <form onSubmit={issuePetId} className="space-y-3">

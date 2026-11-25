@@ -155,7 +155,6 @@ export function PetRegistrationScreen({ onBack, onCreated }: PetRegistrationScre
       color: data.color || "Not provided",
       photoUrl: data.photo_url ?? undefined,
       petId: data.pet_id ?? "Pending review",
-      rfidTag: data.rfid_tag,
       qrCode: data.qr_code,
       registered: "Pending review",
       registrationStatus: data.status as "pending" | "approved" | "rejected",

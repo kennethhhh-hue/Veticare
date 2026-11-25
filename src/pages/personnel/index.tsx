@@ -239,7 +239,6 @@ const PersonnelApp = () => {
         .select("*")
         .eq("status", "approved")
         .not("pet_id", "is", null)
-        .not("rfid_tag", "is", null)
         .not("qr_code", "is", null);
       if (!active) return;
       if (petsError) {
@@ -299,7 +298,6 @@ const PersonnelApp = () => {
             : vaccinationResult.error ? "Vaccination records unavailable" : "No vaccination record linked",
           lastVaccinatedOn: vaccination?.administered_on,
           photoUrl: pet.photo_url ?? undefined,
-          rfidTag: pet.rfid_tag,
           qrCode: pet.qr_code,
         };
       });

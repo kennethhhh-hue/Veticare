@@ -75,7 +75,7 @@ export function VerificationQueue({ id }: VerificationQueueProps) {
         submitted,
         createdAt: pet.created_at,
         status: pet.status as StatusKey,
-        missing: pet.status === "pending" ? ["Pet ID and RFID review"] : [],
+        missing: pet.status === "pending" ? ["Pet ID and QR code review"] : [],
       };
     }));
     setLoading(false);
@@ -134,7 +134,7 @@ export function VerificationQueue({ id }: VerificationQueueProps) {
               ) : null}
             </h2>
             <p className="mt-0.5 text-[12px] text-muted-foreground">
-              Live owner submissions. Assign Pet ID and RFID in Pet Registrations before approval.
+              Live owner submissions. Issue a Pet ID and QR code in Pet Registrations before approval.
             </p>
           </div>
           <Button variant="outline" size="sm" onClick={() => void loadQueue()} disabled={loading} className="shrink-0 rounded-xl text-[11px]">Refresh</Button>

@@ -22,7 +22,6 @@ export interface OwnerPet {
   weight: string;
   color: string;
   petId: string;
-  rfidTag?: string | null;
   qrCode?: string | null;
   ownerName?: string;
   ownerEmail?: string;
@@ -72,7 +71,6 @@ export const ownerPets: OwnerPet[] = [
     weight: "3.4 kg",
     color: "Cream",
     petId: "VC-2026-0148",
-    rfidTag: "985141000123458",
     registered: "Feb 2026",
     photoUrl:
       "https://cdn.enter.pro/resources/uid_100710852/veticare-owner-mochi_0fa8d885.png",
@@ -94,7 +92,6 @@ export const ownerPets: OwnerPet[] = [
     weight: "12.1 kg",
     color: "Brown",
     petId: "VC-2026-0122",
-    rfidTag: "985141000123457",
     registered: "Jan 2026",
     photoUrl:
       "https://cdn.enter.pro/resources/uid_100710852/veticare-owner-bantay_47d4d0d5.png",

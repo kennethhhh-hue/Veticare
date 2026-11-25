@@ -69,7 +69,6 @@ export function PetIdCard({ pet, ownerName }: { pet: OwnerPet; ownerName?: strin
         <dl className="mt-3.5 grid grid-cols-2 gap-y-2 border-t border-border pt-3">
           {[
             { label: "Owner", value: ownerName ?? "Pet owner" },
-            { label: "Collar RFID", value: pet.rfidTag ?? "Not linked" },
             { label: "Age", value: pet.age },
             { label: "Weight", value: pet.weight },
             { label: "Registered", value: pet.registered },

@@ -79,7 +79,6 @@ interface OwnerPetProfile {
   sex: string;
   photo_url: string | null;
   pet_id: string | null;
-  rfid_tag: string | null;
   status: string;
 }
 
@@ -129,7 +128,7 @@ const Owners = () => {
         .eq("role", "owner")
         .is("account_deleted_at", null)
         .order("created_at", { ascending: false }),
-      supabase.from("pets").select("id, owner_id, name, species, breed, age, sex, photo_url, pet_id, rfid_tag, status"),
+      supabase.from("pets").select("id, owner_id, name, species, breed, age, sex, photo_url, pet_id, status"),
     ]);
     if (version !== ownerLoadVersion.current) return;
 
@@ -788,7 +787,7 @@ const Owners = () => {
                               </div>
                               <p className="truncate text-[9.5px] text-muted-foreground">{pet.breed} · {pet.species} · {pet.sex} · {pet.age}</p>
                               <p className="num mt-0.5 truncate text-[9px] text-muted-foreground">
-                                Pet ID: {pet.pet_id ?? "Pending"} · RFID: {pet.rfid_tag ?? "Not assigned"}
+                                Pet ID: {pet.pet_id ?? "Pending"}
                               </p>
                             </div>
                           </li>

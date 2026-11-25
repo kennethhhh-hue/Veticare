@@ -32,7 +32,6 @@ export const writePersonnelNotifications = (enabled: boolean) => localStorage.se
 export interface PersonnelImpoundNotice {
   id: string;
   petId: string;
-  rfidTag: string | null;
   petName: string;
   ownerName: string;
   ownerPhone: string;
@@ -52,7 +51,6 @@ export function createImpoundNotice(pet: PersonnelPet, locationFound: string, da
   const notice: PersonnelImpoundNotice = {
     id: `PO-${Date.now()}`,
     petId: pet.id,
-    rfidTag: pet.rfidTag ?? null,
     petName: pet.name,
     ownerName: pet.owner,
     ownerPhone: pet.contact,

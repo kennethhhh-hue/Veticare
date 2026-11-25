@@ -162,7 +162,7 @@ const Reports = () => {
     let fetchError: string | null = null;
 
     if (genCategory === "Pet Registrations") {
-      const result = await supabase.from("pets").select("id, owner_id, name, species, breed, age, sex, weight, color, status, pet_id, rfid_tag, qr_code, created_at, approved_at");
+      const result = await supabase.from("pets").select("id, owner_id, name, species, breed, age, sex, weight, color, status, pet_id, qr_code, created_at, approved_at");
       rows = result.data ?? [];
       fetchError = result.error?.message ?? null;
     } else if (genCategory === "Owners") {
@@ -178,7 +178,7 @@ const Reports = () => {
       rows = result.data ?? [];
       fetchError = result.error?.message ?? null;
     } else if (genCategory === "Pet ID") {
-      const result = await supabase.from("pets").select("id, owner_id, name, species, breed, pet_id, rfid_tag, qr_code, pet_id_status, pet_id_issued_at, pet_id_valid_through, status, created_at").not("pet_id", "is", null);
+      const result = await supabase.from("pets").select("id, owner_id, name, species, breed, pet_id, qr_code, pet_id_status, pet_id_issued_at, pet_id_valid_through, status, created_at").not("pet_id", "is", null);
       rows = result.data ?? [];
       fetchError = result.error?.message ?? null;
     } else {

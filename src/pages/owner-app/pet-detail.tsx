@@ -98,7 +98,6 @@ export function PetDetail({ pet, onBack, onShowId, onRequest }: PetDetailProps) 
         <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2.5 rounded-2xl border border-border bg-card p-3.5">
           {[
             { label: "Pet ID", value: pet.petId },
-            { label: "Collar RFID", value: pet.rfidTag || "Not linked" },
             { label: "Registered", value: pet.registered },
             { label: "Weight", value: pet.weight },
             { label: "Color", value: pet.color },

@@ -140,7 +140,7 @@ export function AddPetDialog({ open, owners, onOpenChange, onCreated }: AddPetDi
                 ["Color / markings", color.trim() || "Not provided"],
                 ["Owner", reviewRegistration.owner],
                 ["Owner contact", reviewRegistration.phone],
-                ["RFID / QR", "Assigned by admin after review"],
+                ["QR code", "Assigned by admin after review"],
               ].map(([label, value]) => (
                 <div key={label} className="min-w-0 rounded-lg bg-card px-2.5 py-2">
                   <dt className="text-[8px] font-bold uppercase tracking-[0.1em] text-muted-foreground">{label}</dt>
@@ -149,7 +149,7 @@ export function AddPetDialog({ open, owners, onOpenChange, onCreated }: AddPetDi
               ))}
             </dl>
             <p className="rounded-lg border border-warning/25 bg-warning/10 p-2.5 text-[9.5px] leading-relaxed text-muted-foreground">
-              Confirming adds this sample registration as pending. The assigned Pet ID is shown above; RFID and QR are assigned by the admin during approval.
+              Confirming adds this sample registration as pending. The assigned Pet ID is shown above; The admin issues the QR code during approval.
             </p>
             <div className="flex justify-between gap-2 pt-1">
               <Button type="button" variant="outline" onClick={() => setReviewRegistration(null)}>Back to edit</Button>

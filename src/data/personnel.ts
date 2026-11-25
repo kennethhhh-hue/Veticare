@@ -29,7 +29,6 @@ export interface PersonnelPet {
   vaccination: VaccinationState;
   lastVaccine: string;
   lastVaccinatedOn?: string;
-  rfidTag?: string | null;
   qrCode?: string | null;
   photoUrl?: string;
 }

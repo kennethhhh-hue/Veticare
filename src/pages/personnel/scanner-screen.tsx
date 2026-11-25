@@ -198,8 +198,7 @@ export function ScannerScreen({ pets, openFollowUps, onRecord, onRequestFollowUp
         item.id.toLowerCase() === query ||
         item.id.toLowerCase().endsWith(query) ||
         item.qrCode?.replace(/[\s-]/g, "").toLowerCase() === normalizedQuery ||
-        item.name.toLowerCase() === query ||
-        item.rfidTag?.replace(/[\s-]/g, "").toLowerCase() === normalizedQuery,
+        item.name.toLowerCase() === query,
     );
     if (!match) {
       setManualError("No pet found for that ID. Check the registration number.");
@@ -399,7 +398,7 @@ export function ScannerScreen({ pets, openFollowUps, onRecord, onRequestFollowUp
               className="flex w-full items-center justify-center gap-1.5 py-1.5 text-[10.5px] font-semibold text-muted-foreground hover:text-foreground"
             >
               <QrCode className="size-3.5" />
-              Enter pet ID / RFID manually
+              Enter Pet ID manually
             </button>
 
             {manualOpen ? (
@@ -414,8 +413,8 @@ export function ScannerScreen({ pets, openFollowUps, onRecord, onRequestFollowUp
                         submitManual();
                       }
                     }}
-                    placeholder="Pet ID, RFID tag, or name"
-                    aria-label="Pet ID, RFID tag, or pet name"
+                    placeholder="Pet ID or pet name"
+                    aria-label="Pet ID or pet name"
                     className="h-9 rounded-lg border-border text-[11.5px]"
                   />
                   <Button
@@ -430,7 +429,7 @@ export function ScannerScreen({ pets, openFollowUps, onRecord, onRequestFollowUp
                   <p className="text-[9.5px] font-medium text-destructive">{manualError}</p>
                 ) : (
                     <p className="text-[9px] text-muted-foreground">
-                      Connect a compatible collar RFID reader in keyboard mode, focus this field, and scan; you can also type the tag code.
+                      Type the Pet ID shown on the digital card or search by the pet's name.
                   </p>
                 )}
               </div>
@@ -439,7 +438,7 @@ export function ScannerScreen({ pets, openFollowUps, onRecord, onRequestFollowUp
             <div className="flex items-start gap-2 rounded-xl border border-info/20 bg-info/5 p-2.5">
               <TriangleAlert className="mt-0.5 size-3.5 shrink-0 text-info" />
               <p className="text-[9.5px] leading-relaxed text-muted-foreground">
-                Camera scans QR codes. Collar RFID requires a separate compatible RFID reader; if it works as a keyboard, focus the manual field and scan there. Camera permission requires HTTPS or localhost.
+                Scan the QR code on the digital Pet ID. Camera access requires HTTPS or localhost.
               </p>
             </div>
 

@@ -141,7 +141,6 @@ const OwnerApp = () => {
       color: pet.color || "Not provided",
       photoUrl: pet.photo_url ?? undefined,
       petId: pet.pet_id || "Pending review",
-      rfidTag: pet.rfid_tag,
       qrCode: pet.qr_code,
       registered: pet.status === "approved" ? new Date(pet.created_at).toLocaleDateString(undefined, { month: "short", year: "numeric" }) : "Pending review",
       registrationStatus: pet.status as "pending" | "approved" | "rejected",
