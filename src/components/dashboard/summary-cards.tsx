@@ -1,12 +1,5 @@
 import { useEffect, useState } from "react";
-import {
-  ArrowUpRight,
-  Heart,
-  PawPrint,
-  Clock3,
-  ClipboardCheck,
-  BedDouble,
-} from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { addCalendarDays, getPhilippineDateKey } from "@/lib/philippine-date";
@@ -15,10 +8,12 @@ interface SummaryCardsProps {
   onOpen: (section: string) => void;
 }
 
+const DEFAULT_KENNEL_CAPACITY = 24;
+
 export function SummaryCards({ onOpen }: SummaryCardsProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [shelter, setShelter] = useState({ occupied: 0, capacity: 24, kennel: 0, foster: 0, reserved: 0, longest: [] as { id: string; name: string; breed: string; days: number }[] });
+  const [shelter, setShelter] = useState({ occupied: 0, capacity: DEFAULT_KENNEL_CAPACITY, kennel: 0, foster: 0, reserved: 0, longest: [] as { id: string; name: string; breed: string; days: number }[] });
   const [adoptionData, setAdoptionData] = useState({ thisMonth: 0, thisWeek: 0, pendingApplications: 0, avgDaysInCare: "—" as string | number, weekly: Array.from({ length: 5 }, (_, index) => ({ label: `W${index + 1}`, value: 0 })) });
 
   useEffect(() => {
@@ -32,7 +27,8 @@ export function SummaryCards({ onOpen }: SummaryCardsProps) {
         supabase.from("shelter_settings").select("kennel_capacity").eq("id", true).maybeSingle(),
       ]);
       if (!active) return;
-      const queryError = impoundsResult.error ?? adoptionsResult.error ?? settingsResult.error;
+      const settingsMissing = settingsResult.error?.code === "PGRST205" || settingsResult.error?.code === "42P01";
+      const queryError = impoundsResult.error ?? adoptionsResult.error ?? (settingsMissing ? null : settingsResult.error);
       if (queryError) {
         setError(queryError.message);
         setLoading(false);
@@ -48,7 +44,7 @@ export function SummaryCards({ onOpen }: SummaryCardsProps) {
       const daysSinceMonday = (todayDate.getUTCDay() + 6) % 7;
       const weekStart = addCalendarDays(today, -daysSinceMonday);
       const activeImpounds = impounds.filter((impound) => impound.impound_status !== "released");
-      const capacity = settingsResult.data?.kennel_capacity ?? 24;
+      const capacity = settingsResult.data?.kennel_capacity ?? DEFAULT_KENNEL_CAPACITY;
       const daysInCareById = new Map(impounds.map((impound) => [impound.id, impound.impounded_at]));
       const completed = applications.filter((application) => application.status === "completed" && application.decision_date);
       const totalCareDays = completed.reduce((sum, application) => {
@@ -103,18 +99,13 @@ export function SummaryCards({ onOpen }: SummaryCardsProps) {
     <div className="grid gap-5 md:grid-cols-2">
       <section className="surface-card fade-up rounded-2xl border border-border bg-card p-4 sm:p-5">
         <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <span className="grid size-10 place-items-center rounded-xl bg-warning/12 text-warning">
-              <PawPrint className="size-[18px]" strokeWidth={2.1} />
-            </span>
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
-                Impounded animals
-              </p>
-              <h2 className="mt-0.5 text-[15px] font-extrabold tracking-[-0.02em] text-foreground">
-                Shelter occupancy
-              </h2>
-            </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+              Impounded animals
+            </p>
+            <h2 className="mt-0.5 text-[15px] font-extrabold tracking-[-0.02em] text-foreground">
+              Shelter occupancy
+            </h2>
           </div>
           <button
             type="button"
@@ -141,8 +132,7 @@ export function SummaryCards({ onOpen }: SummaryCardsProps) {
               className="mt-2.5 h-1.5 bg-secondary"
               indicatorClassName="bg-warning"
             />
-            <p className="mt-1.5 flex items-center gap-1 text-[10.5px] text-muted-foreground">
-              <BedDouble className="size-3" />
+            <p className="mt-1.5 text-[10.5px] text-muted-foreground">
               {loading ? "Loading shelter capacity…" : `${occupancy}% occupied • ${Math.max(0, shelter.capacity - shelter.occupied)} slots free`}
             </p>
           </div>
@@ -165,8 +155,7 @@ export function SummaryCards({ onOpen }: SummaryCardsProps) {
         </div>
 
         <div className="mt-3.5 border-t border-border pt-3">
-          <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-            <Clock3 className="size-3" />
+          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
             Longest stays
           </p>
           <ul className="mt-1.5 space-y-1">
@@ -186,18 +175,13 @@ export function SummaryCards({ onOpen }: SummaryCardsProps) {
 
       <section className="surface-card fade-up rounded-2xl border border-border bg-card p-4 sm:p-5">
         <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <span className="grid size-10 place-items-center rounded-xl bg-primary-soft text-primary">
-              <Heart className="size-[18px]" strokeWidth={2.1} />
-            </span>
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
-                Adoptions
-              </p>
-              <h2 className="mt-0.5 text-[15px] font-extrabold tracking-[-0.02em] text-foreground">
-                Adoption velocity
-              </h2>
-            </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+              Adoptions
+            </p>
+            <h2 className="mt-0.5 text-[15px] font-extrabold tracking-[-0.02em] text-foreground">
+              Adoption velocity
+            </h2>
           </div>
           <button
             type="button"
@@ -239,24 +223,20 @@ export function SummaryCards({ onOpen }: SummaryCardsProps) {
 
           <div className="space-y-1.5">
             {[
-              { label: "This week", value: adoptionData.thisWeek, icon: ClipboardCheck },
-              { label: "In review", value: adoptionData.pendingApplications, icon: Clock3 },
-              { label: "Avg. days in care", value: adoptionData.avgDaysInCare, icon: BedDouble },
-            ].map((row) => {
-              const Icon = row.icon;
-              return (
-                <div
-                  key={row.label}
-                  className="flex items-center gap-2 rounded-lg bg-secondary/60 px-2 py-1.5"
-                >
-                  <Icon className="size-3 text-muted-foreground" />
-                  <span className="text-[10.5px] text-muted-foreground">{row.label}</span>
-                  <span className="num ml-auto text-[11.5px] font-bold text-foreground">
-                    {loading ? "—" : row.value}
-                  </span>
-                </div>
-              );
-            })}
+              { label: "This week", value: adoptionData.thisWeek },
+              { label: "In review", value: adoptionData.pendingApplications },
+              { label: "Avg. days in care", value: adoptionData.avgDaysInCare },
+            ].map((row) => (
+              <div
+                key={row.label}
+                className="flex items-center gap-2 rounded-lg bg-secondary/60 px-2 py-1.5"
+              >
+                <span className="text-[10.5px] text-muted-foreground">{row.label}</span>
+                <span className="num ml-auto text-[11.5px] font-bold text-foreground">
+                  {loading ? "—" : row.value}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       </section>

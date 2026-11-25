@@ -1,29 +1,6 @@
-import {
-  ArrowDownRight,
-  ArrowUpRight,
-  Heart,
-  PawPrint,
-  ShieldCheck,
-  Users,
-} from "lucide-react";
 import { Area, AreaChart } from "recharts";
 import { cn } from "@/lib/utils";
 import type { Kpi, Tone } from "@/data/veticare";
-
-const iconMap = {
-  paw: PawPrint,
-  shield: ShieldCheck,
-  users: Users,
-  heart: Heart,
-};
-
-const toneMap: Record<Tone, string> = {
-  primary: "bg-primary-soft text-primary",
-  warning: "bg-warning/12 text-warning",
-  info: "bg-info/12 text-info",
-  danger: "bg-destructive/10 text-destructive",
-  neutral: "bg-secondary text-secondary-foreground",
-};
 
 const strokeMap: Record<Tone, string> = {
   primary: "hsl(var(--chart-1))",
@@ -41,9 +18,7 @@ interface StatCardProps {
 }
 
 export function StatCard({ kpi, index = 0, onClick, loading = false }: StatCardProps) {
-  const Icon = iconMap[kpi.icon];
   const improving = kpi.id === "pending" ? kpi.delta < 0 : kpi.delta > 0;
-  const TrendIcon = kpi.delta >= 0 ? ArrowUpRight : ArrowDownRight;
   const gradientId = `spark-${kpi.id}`;
 
   return (
@@ -51,34 +26,25 @@ export function StatCard({ kpi, index = 0, onClick, loading = false }: StatCardP
       type="button"
       onClick={onClick}
       aria-label={`Open ${kpi.label}`}
-      className="fade-up surface-card group relative w-full overflow-hidden rounded-2xl border border-border bg-card p-4 text-left transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:p-5"
+      className="fade-up surface-card relative w-full overflow-hidden rounded-2xl border border-border bg-card p-4 text-left transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:p-5"
       style={{ animationDelay: `${index * 70}ms` }}
     >
-      <div className="flex items-start justify-between gap-3">
-        <span
-          className={cn(
-            "grid size-10 place-items-center rounded-xl transition-transform duration-300 group-hover:scale-105 sm:size-11",
-            toneMap[kpi.tone],
-          )}
-        >
-          <Icon className="size-[19px]" strokeWidth={2.1} />
-        </span>
+      <div className="flex min-h-8 items-start justify-between gap-2">
+        <p className="text-[11.5px] font-semibold uppercase leading-snug tracking-[0.1em] text-muted-foreground">
+          {kpi.label}
+        </p>
         {!loading && kpi.delta !== 0 ? <span
           className={cn(
-            "flex items-center gap-0.5 rounded-full px-2 py-1 text-[11px] font-bold",
+            "num shrink-0 rounded-full px-2 py-1 text-[11px] font-bold",
             improving
               ? "bg-success/10 text-success"
               : "bg-destructive/10 text-destructive",
           )}
         >
-          <TrendIcon className="size-3" strokeWidth={2.6} />
-          {Math.abs(kpi.delta)}%
+          {kpi.delta > 0 ? "+" : "−"}{Math.abs(kpi.delta)}%
         </span> : null}
       </div>
 
-      <p className="mt-4 text-[11.5px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-        {kpi.label}
-      </p>
       <div className="mt-1 flex items-end justify-between gap-2">
         <p className="num text-[30px] font-extrabold leading-none text-foreground sm:text-[34px]">
           {loading ? "—" : kpi.value}

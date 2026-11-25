@@ -12,7 +12,6 @@ export interface Kpi {
   delta: number;
   series: number[];
   tone: Tone;
-  icon: "paw" | "shield" | "users" | "heart";
 }
 
 export interface ActivityPoint {
@@ -66,7 +65,6 @@ export const kpis: Kpi[] = [
     caption: "+27 added this month",
     delta: 12.4,
     tone: "primary",
-    icon: "paw",
     series: [18, 22, 20, 26, 24, 31, 29, 35, 33, 40, 38, 45],
   },
   {
@@ -76,7 +74,6 @@ export const kpis: Kpi[] = [
     caption: "4 waiting over 48 hours",
     delta: -8.3,
     tone: "warning",
-    icon: "shield",
     series: [22, 19, 21, 17, 18, 15, 16, 14, 15, 13, 14, 12],
   },
   {
@@ -86,7 +83,6 @@ export const kpis: Kpi[] = [
     caption: "94% with complete records",
     delta: 6.1,
     tone: "info",
-    icon: "users",
     series: [120, 128, 134, 131, 142, 148, 152, 158, 163, 169, 178, 186],
   },
   {
@@ -96,7 +92,6 @@ export const kpis: Kpi[] = [
     caption: "6 applications in review",
     delta: 18.9,
     tone: "primary",
-    icon: "heart",
     series: [8, 11, 9, 13, 12, 15, 14, 18, 17, 22, 26, 34],
   },
 ];
