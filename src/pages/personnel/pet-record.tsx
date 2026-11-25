@@ -1,3 +1,4 @@
+import { ImpoundClaimBadge } from "@/components/veticare/impound-claim-badge";
 import {
   ArrowLeft,
   BadgeCheck,
@@ -116,6 +117,7 @@ export function PetRecord({
               >
                 {registrationLabels[pet.registration]}
               </span>
+              {pet.impoundClaimed ? <ImpoundClaimBadge /> : null}
             </div>
             <p className="mt-0.5 truncate text-[10.5px] text-muted-foreground">
               {pet.breed} • {pet.sex} • {pet.age}

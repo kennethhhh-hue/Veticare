@@ -12,19 +12,18 @@ import {
   Phone,
   RefreshCw,
   Search,
-  SlidersHorizontal,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/veticare/app-shell";
 import { PageHeader } from "@/components/admin/page-header";
+import { AdminOwnerAvatar } from "@/components/admin/owner-avatar";
 import { MetricStrip } from "@/components/admin/metric-strip";
 import { FilterSelect } from "@/components/admin/filter-select";
 import { StatusPill } from "@/components/admin/status-pill";
 import { PetPhoto } from "@/components/owner-app/pet-photo";
 import { Pagination } from "@/components/admin/pagination";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -39,15 +38,14 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
 import { getPhilippineDateKey } from "@/lib/philippine-date";
 import {
   type AdoptionApplication,
   type AdoptionStatus,
-  type HomeVisit,
 } from "@/data/shelter-records";
 import { supabase } from "@/integrations/supabase/client";
 import { sidebarCountKeys } from "@/data/veticare";
+import { ImpoundClaimBadge } from "@/components/veticare/impound-claim-badge";
 
 interface ApplicantOption {
   id: string;
@@ -67,9 +65,10 @@ interface AnimalOption {
   sex: string;
   color: string;
   photoUrl?: string;
+  impoundClaimed: boolean;
 }
 
-type RegistryApplication = AdoptionApplication & { animal: AnimalOption | null };
+type RegistryApplication = Omit<AdoptionApplication, "homeVisit"> & { animal: AnimalOption | null };
 
 function AnimalPreview({ animal }: { animal: AnimalOption }) {
   return (
@@ -81,6 +80,7 @@ function AnimalPreview({ animal }: { animal: AnimalOption }) {
           <p className="break-words text-sm font-bold">{animal.name}</p>
           <p className="text-xs text-muted-foreground">{[animal.species, animal.breed, animal.sex, animal.age, animal.color].filter(Boolean).join(" · ")}</p>
           <p className="mt-1 break-all text-[10px] font-semibold text-muted-foreground">{animal.impoundId}</p>
+          {animal.impoundClaimed ? <ImpoundClaimBadge className="mt-1" /> : null}
         </div>
       </div>
     </section>
@@ -88,19 +88,6 @@ function AnimalPreview({ animal }: { animal: AnimalOption }) {
 }
 
 const PAGE_SIZE = 5;
-
-const homeVisitLabels: Record<HomeVisit, string> = {
-  pending: "Pending",
-  scheduled: "Scheduled",
-  passed: "Completed",
-};
-
-const initials = (name: string) =>
-  name
-    .split(" ")
-    .map((part) => part[0])
-    .slice(0, 2)
-    .join("");
 
 const Adoptions = () => {
   const queryClient = useQueryClient();
@@ -113,9 +100,6 @@ const Adoptions = () => {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [species, setSpecies] = useState("all");
-  const [visitPending, setVisitPending] = useState(false);
-  const [readyToDecide, setReadyToDecide] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<RegistryApplication | null>(null);
   const [newApplicationOpen, setNewApplicationOpen] = useState(false);
@@ -152,6 +136,7 @@ const Adoptions = () => {
       sex: animal.sex,
       color: animal.color,
       photoUrl: animal.photo_url || photoByPetId.get(animal.pet_id) || undefined,
+      impoundClaimed: animal.impound_status === "claimed",
     });
     setApplicants((profilesResult.data ?? []).filter((profile) => !profile.account_deleted_at).map((profile) => ({
       id: profile.id,
@@ -185,7 +170,6 @@ const Adoptions = () => {
         applied: displayDate,
         appliedAt: application.application_date,
         area: applicant?.barangay || "—",
-        homeVisit: application.home_visit_status as HomeVisit,
         status: application.status as AdoptionStatus,
         note: application.note,
       };
@@ -213,12 +197,9 @@ const Adoptions = () => {
             .includes(search);
         const matchesStatus = status === "all" || application.status === status;
         const matchesSpecies = species === "all" || application.species === species;
-        const matchesVisit = !visitPending || application.homeVisit !== "passed";
-        const matchesReady =
-          !readyToDecide || (application.status === "pending" && application.homeVisit === "passed");
-        return matchesQuery && matchesStatus && matchesSpecies && matchesVisit && matchesReady;
+        return matchesQuery && matchesStatus && matchesSpecies;
       });
-  }, [rows, query, status, species, visitPending, readyToDecide]);
+  }, [rows, query, status, species]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
@@ -234,35 +215,37 @@ const Adoptions = () => {
     setQuery("");
     setStatus("all");
     setSpecies("all");
-    setVisitPending(false);
-    setReadyToDecide(false);
     setPage(1);
     void loadAdoptions();
     toast.success("Adoption queue refreshed.");
   };
 
-  const decide = async (application: AdoptionApplication, next: AdoptionStatus) => {
+  const decide = async (application: RegistryApplication, next: AdoptionStatus) => {
     const decisionDate = next === "pending" ? null : getPhilippineDateKey();
-    const completesHomeVisit = next === "approved" || next === "completed";
     const update = {
       status: next,
       decision_date: decisionDate,
-      ...(completesHomeVisit ? { home_visit_status: "passed" } : {}),
     };
-    const { error } = await supabase.from("adoption_applications")
+    const { data, error } = await supabase.from("adoption_applications")
       .update(update)
       .eq("id", application.id)
+      .eq("status", application.status)
       .select("id")
-      .single();
+      .maybeSingle();
     if (error) {
       toast.error(error.message);
       return;
     }
-    const changes: Partial<AdoptionApplication> = {
+    if (!data) {
+      toast.error("This application changed. Open it again to see its current status.");
+      setSelected(null);
+      void loadAdoptions();
+      return;
+    }
+    const changes: Partial<RegistryApplication> = {
       status: next,
       applicationStatus: next,
       decisionDate,
-      ...(completesHomeVisit ? { homeVisit: "passed" } : {}),
     };
     setRows((prev) => prev.map((item) => item.id === application.id ? { ...item, ...changes } : item));
     setSelected((current) =>
@@ -283,17 +266,6 @@ const Adoptions = () => {
     }
   };
 
-  const updateHomeVisit = async (application: AdoptionApplication, next: HomeVisit) => {
-    const { error } = await supabase.from("adoption_applications").update({ home_visit_status: next }).eq("id", application.id);
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
-    setRows((current) => current.map((item) => item.id === application.id ? { ...item, homeVisit: next } : item));
-    setSelected((current) => current?.id === application.id ? { ...current, homeVisit: next } : current);
-    toast.success(`Home visit marked ${next}.`);
-  };
-
   const createApplication = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const applicant = applicants.find((owner) => owner.id === applicantId);
@@ -307,7 +279,6 @@ const Adoptions = () => {
       applicant_id: applicant.id,
       impound_record_id: animal.id,
       application_date: date,
-      home_visit_status: "pending",
       note: applicantNote.trim(),
     });
     setSavingApplication(false);
@@ -412,17 +383,6 @@ const Adoptions = () => {
             />
             <div className="col-span-2 flex items-center gap-1.5 sm:col-auto sm:ml-auto">
               <Button
-                variant="outline"
-                onClick={() => setShowFilters((value) => !value)}
-                className={cn(
-                  "h-9 rounded-xl border-border bg-card px-2.5 text-[11.5px] font-semibold",
-                  showFilters && "border-primary/30 bg-primary-soft text-primary",
-                )}
-              >
-                <SlidersHorizontal className="size-3.5" />
-                Filters
-              </Button>
-              <Button
                 variant="ghost"
                 onClick={refresh}
                 className="h-9 rounded-xl px-2.5 text-[11.5px] font-semibold text-muted-foreground hover:text-foreground"
@@ -433,49 +393,6 @@ const Adoptions = () => {
             </div>
           </div>
         </div>
-
-        {showFilters ? (
-          <div className="flex flex-wrap items-center gap-2 border-t border-border bg-secondary/30 px-3.5 py-2.5 sm:px-4">
-            <span className="mr-1 text-[9.5px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-              Quick filters
-            </span>
-            {[
-              {
-                id: "visit",
-                label: "Home visit not cleared",
-                checked: visitPending,
-                onChange: (value: boolean) => {
-                  setVisitPending(value);
-                  setPage(1);
-                },
-              },
-              {
-                id: "ready",
-                label: "Ready to decide",
-                checked: readyToDecide,
-                onChange: (value: boolean) => {
-                  setReadyToDecide(value);
-                  setPage(1);
-                },
-              },
-            ].map((item) => (
-              <label
-                key={item.id}
-                className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[10.5px] font-semibold text-foreground/85"
-              >
-                <Checkbox
-                  checked={item.checked}
-                  onCheckedChange={(value) => item.onChange(value === true)}
-                  className="size-3.5 rounded-[4px] border-border data-[state=checked]:border-primary"
-                />
-                {item.label}
-              </label>
-            ))}
-            <span className="ml-auto text-[10px] text-muted-foreground">
-              {filtered.length} of {rows.length} applications
-            </span>
-          </div>
-        ) : null}
 
         <div className="hidden border-y border-border bg-secondary/40 px-5 py-2 xl:grid xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1.1fr)_105px_105px_96px_112px] xl:gap-4">
           {["Owner / application ID", "Animal / impound ID", "Application date", "Decision date", "Application status", "Action"].map((label) => (
@@ -534,9 +451,7 @@ const Adoptions = () => {
                 className="grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2.5 px-3.5 py-3.5 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary sm:px-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1.1fr)_105px_105px_96px_112px] xl:gap-4 xl:px-5"
               >
                 <div className="order-1 flex min-w-0 items-center gap-2.5 xl:order-none">
-                  <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary-soft text-[11px] font-bold text-primary">
-                    {initials(application.applicant)}
-                  </span>
+                  <AdminOwnerAvatar ownerId={application.ownerId} name={application.applicant} className="size-9 rounded-xl bg-primary-soft text-[11px] text-primary" />
                   <div className="min-w-0">
                     <p className="truncate text-[12.5px] font-bold text-foreground">
                       {application.applicant}
@@ -561,6 +476,7 @@ const Adoptions = () => {
                   <p className="truncate text-[9.5px] text-muted-foreground">
                     {application.petBreed} • {application.impoundId}
                   </p>
+                  {application.animal?.impoundClaimed ? <ImpoundClaimBadge /> : null}
                 </div>
 
                 <div className="order-3 xl:order-none">
@@ -629,23 +545,13 @@ const Adoptions = () => {
         />
       </section>
 
-      <p className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10.5px] text-muted-foreground/80">
-        {rows.filter((row) => row.status === "pending" && row.homeVisit === "passed").length}{" "}
-        {rows.filter((row) => row.status === "pending" && row.homeVisit === "passed").length === 1
-          ? "application is"
-          : "applications are"}{" "}
-        ready for a decision
-      </p>
-
       <Dialog open={Boolean(selected)} onOpenChange={(open) => (!open ? setSelected(null) : null)}>
         <DialogContent className="max-h-[88vh] w-[calc(100%-2rem)] max-w-[480px] overflow-y-auto rounded-2xl border-border p-5 sm:rounded-2xl">
           {selected ? (
             <>
               <DialogHeader className="pr-6 text-left">
                 <div className="flex items-center gap-3">
-                  <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary-soft text-[12px] font-bold text-primary">
-                    {initials(selected.applicant)}
-                  </span>
+                  <AdminOwnerAvatar ownerId={selected.ownerId} name={selected.applicant} className="size-11 rounded-xl bg-primary-soft text-primary" />
                   <div className="min-w-0">
                     <DialogTitle className="truncate text-[16px] font-extrabold tracking-[-0.02em]">
                       {selected.applicant}
@@ -660,7 +566,6 @@ const Adoptions = () => {
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <StatusPill status={selected.status} />
-                  <StatusPill status={selected.homeVisit === "passed" ? "completed" : selected.homeVisit} />
                 </div>
 
                 {selected.animal ? <AnimalPreview animal={selected.animal} /> : null}
@@ -672,7 +577,6 @@ const Adoptions = () => {
                     { label: "Application date", value: selected.applicationDate, icon: Clock },
                     { label: "Decision date", value: selected.decisionDate ?? "Not decided", icon: Clock },
                     { label: "Application status", value: selected.applicationStatus, icon: Heart },
-                    { label: "Home visit", value: homeVisitLabels[selected.homeVisit], icon: MapPin },
                     { label: "Mobile", value: selected.phone, icon: Phone },
                     { label: "Email", value: selected.email, icon: Mail },
                     { label: "Barangay", value: selected.area, icon: MapPin },
@@ -704,12 +608,6 @@ const Adoptions = () => {
                     {selected.note}
                   </p>
                 </div>
-
-                {selected.status === "pending" && selected.homeVisit !== "passed" ? (
-                  <Button variant="outline" onClick={() => updateHomeVisit(selected, "passed")} className="w-full">
-                    <MapPin className="size-4" />Mark home visit passed
-                  </Button>
-                ) : null}
 
                 {selected.status === "pending" ? (
                   <div className="flex flex-col gap-2">

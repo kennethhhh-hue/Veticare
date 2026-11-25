@@ -238,17 +238,33 @@
     animation: scan-line 2.6s ease-in-out infinite;
   }
 
-  .scroll-slim {
+  .scroll-slim,
+  .popup-scroll {
     scrollbar-width: thin;
     scrollbar-color: hsl(var(--border)) transparent;
   }
 
-  .scroll-slim::-webkit-scrollbar {
+  .popup-scroll:where(.overflow-auto, .overflow-y-auto, .overflow-scroll, .overflow-y-scroll) {
+    scrollbar-gutter: stable both-edges;
+  }
+
+  .scroll-slim::-webkit-scrollbar,
+  .popup-scroll::-webkit-scrollbar {
     width: 6px;
     height: 6px;
   }
 
-  .scroll-slim::-webkit-scrollbar-thumb {
+  .popup-scroll::-webkit-scrollbar-track,
+  .popup-scroll::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  .popup-scroll::-webkit-scrollbar-button {
+    display: none;
+  }
+
+  .scroll-slim::-webkit-scrollbar-thumb,
+  .popup-scroll::-webkit-scrollbar-thumb {
     background: hsl(var(--border));
     border-radius: 999px;
   }

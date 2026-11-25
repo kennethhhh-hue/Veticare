@@ -19,6 +19,7 @@ export interface ImpoundedDog {
   dateImpounded: string;
   locationFound: string;
   impoundStatus: AnimalImpoundStatus;
+  claimedPetRecordId?: string;
   adoptionStatus: AnimalAdoptionStatus;
   photoUrl?: string;
   days: number;
@@ -56,7 +57,7 @@ export const impoundedDogs: ImpoundedDog[] = impoundSamples.map((dog) => ({
   animalType: "Dog",
   dateImpounded: dog.impoundedAt,
   locationFound: dog.area,
-  impoundStatus: dog.status === "reserved" ? "claimed" : "impounded",
+  impoundStatus: "impounded",
   adoptionStatus: dog.status === "reserved" ? "pending" : "available",
 }));
 

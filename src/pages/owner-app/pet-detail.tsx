@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { PetPhoto } from "@/components/owner-app/pet-photo";
 import { Button } from "@/components/ui/button";
 import type { OwnerPet, OwnerRequestInput } from "@/data/owner-app";
+import { ImpoundClaimBadge } from "@/components/veticare/impound-claim-badge";
 import { formatCalendarDate, getPhilippineDateKey } from "@/lib/philippine-date";
 import { usePetVaccinations } from "@/hooks/use-pet-vaccinations";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -132,6 +133,7 @@ export function PetDetail({ pet, onBack, onShowId, onEdit, onPhotoUpdated, onReq
         <input ref={photoInput} type="file" accept={photoTypes.join(",")} onChange={(event) => void changePhoto(event)} hidden />
         <div className="absolute inset-x-5 bottom-4">
           <div className="flex flex-wrap items-center gap-1.5">
+            {pet.impoundClaimed ? <ImpoundClaimBadge /> : null}
             {pet.tags.slice(0, 2).map((tag) => (
               <span
                 key={tag}

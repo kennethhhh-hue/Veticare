@@ -288,6 +288,7 @@ const PersonnelApp = () => {
           contact: ownerProfile?.phone || "—",
           barangay: ownerProfile?.barangay || "—",
           registration: expired ? "expired" : "active",
+          impoundClaimed: Boolean(pet.impound_claimed_at),
           registeredOn: new Date(pet.created_at).toLocaleDateString(undefined, { month: "short", year: "numeric" }),
           validThrough: pet.pet_id_valid_through
             ? new Date(`${pet.pet_id_valid_through}T12:00:00+08:00`).toLocaleDateString("en-PH", { dateStyle: "medium", timeZone: "Asia/Manila" })

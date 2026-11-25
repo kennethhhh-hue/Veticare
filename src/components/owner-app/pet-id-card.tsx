@@ -7,6 +7,7 @@ import { IdPattern } from "@/components/veticare/id-pattern";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { OwnerPet } from "@/data/owner-app";
+import { ImpoundClaimBadge } from "@/components/veticare/impound-claim-badge";
 import { formatCalendarDate } from "@/lib/philippine-date";
 
 export function PetIdCard({ pet, ownerName }: { pet: OwnerPet; ownerName?: string }) {
@@ -63,9 +64,10 @@ export function PetIdCard({ pet, ownerName }: { pet: OwnerPet; ownerName?: strin
             <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
               {pet.breed} • {pet.sex}
             </p>
-            <span className="num mt-1 inline-block rounded-md bg-primary-soft px-1.5 py-0.5 text-[9px] font-bold text-primary">
-              {pet.petId}
-            </span>
+            <div className="mt-1 flex flex-wrap items-center gap-1">
+              <span className="num rounded-md bg-primary-soft px-1.5 py-0.5 text-[9px] font-bold text-primary">{pet.petId}</span>
+              {pet.impoundClaimed ? <ImpoundClaimBadge /> : null}
+            </div>
           </div>
         </div>
 

@@ -11,6 +11,7 @@ export interface PetRegistration {
   weight?: string;
   color?: string;
   photoUrl?: string | null;
+  impoundClaimed?: boolean;
   owner: string;
   phone: string;
   ownerId?: string;

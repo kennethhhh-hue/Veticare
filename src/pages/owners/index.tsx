@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FunctionsFetchError, FunctionsHttpError } from "@supabase/supabase-js";
 import { useNavigate } from "react-router-dom";
 import {
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
   KeyRound,
   Mail,
   MapPin,
@@ -21,15 +23,18 @@ import {
 import { toast } from "sonner";
 import { AppShell } from "@/components/veticare/app-shell";
 import { PageHeader } from "@/components/admin/page-header";
+import { AdminOwnerAvatar } from "@/components/admin/owner-avatar";
 import { MetricStrip } from "@/components/admin/metric-strip";
 import { FilterSelect } from "@/components/admin/filter-select";
 import { StatusPill } from "@/components/admin/status-pill";
 import { Pagination } from "@/components/admin/pagination";
+import { PetProfileDetails } from "@/components/admin/pet-profile-details";
 import { PetPhoto } from "@/components/owner-app/pet-photo";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { BarangaySelect } from "@/components/owner-app/barangay-select";
 import {
   Dialog,
@@ -38,6 +43,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -62,35 +68,16 @@ import {
 import { cn } from "@/lib/utils";
 import { type OwnerRecord } from "@/data/admin-records";
 import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
+import { ImpoundClaimBadge } from "@/components/veticare/impound-claim-badge";
 
 const PAGE_SIZE = 5;
-const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"];
 type OwnerAccountAction = "reset-owner-password" | "delete-owner-account";
-
-interface OwnerPetProfile {
-  id: string;
-  owner_id: string;
-  name: string;
-  species: string;
-  breed: string;
-  age: string;
-  sex: string;
-  photo_url: string | null;
-  pet_id: string | null;
-  status: string;
-}
-
-const initials = (name: string) =>
-  name
-    .split(" ")
-    .map((part) => part[0])
-    .slice(0, 2)
-    .join("");
 
 const Owners = () => {
   const navigate = useNavigate();
   const [ownerRows, setOwnerRows] = useState<OwnerRecord[]>([]);
-  const [petsByOwner, setPetsByOwner] = useState<Map<string, OwnerPetProfile[]>>(new Map());
+  const [petsByOwner, setPetsByOwner] = useState<Map<string, Tables<"pets">[]>>(new Map());
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -101,10 +88,6 @@ const Owners = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<OwnerRecord | null>(null);
-  const [ownerPhotos, setOwnerPhotos] = useState<Record<string, string | null>>({});
-  const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const photoInput = useRef<HTMLInputElement>(null);
-  const photoLoad = useRef<{ ownerId: string; request: AbortController } | null>(null);
   const [accountAction, setAccountAction] = useState<{ type: OwnerAccountAction; owner: OwnerRecord } | null>(null);
   const [accountActionBusy, setAccountActionBusy] = useState(false);
   const [accountActionError, setAccountActionError] = useState<string | null>(null);
@@ -125,7 +108,7 @@ const Owners = () => {
         .eq("role", "owner")
         .is("account_deleted_at", null)
         .order("created_at", { ascending: false }),
-      supabase.from("pets").select("id, owner_id, name, species, breed, age, sex, photo_url, pet_id, status"),
+      supabase.from("pets").select("*"),
     ]);
     if (version !== ownerLoadVersion.current) return;
 
@@ -140,11 +123,11 @@ const Owners = () => {
     if (petsError) toast.warning("Owner profiles loaded, but pet profiles are unavailable.");
 
     const petCounts = new Map<string, number>();
-    const groupedPets = new Map<string, OwnerPetProfile[]>();
+    const groupedPets = new Map<string, Tables<"pets">[]>();
     for (const pet of petRows ?? []) {
       petCounts.set(pet.owner_id, (petCounts.get(pet.owner_id) ?? 0) + 1);
       const ownerPets = groupedPets.get(pet.owner_id) ?? [];
-      ownerPets.push(pet as OwnerPetProfile);
+      ownerPets.push(pet);
       groupedPets.set(pet.owner_id, ownerPets);
     }
     setPetsByOwner(groupedPets);
@@ -166,57 +149,6 @@ const Owners = () => {
   useEffect(() => {
     void loadOwners();
   }, [loadOwners]);
-
-  const selectedId = selected?.id;
-  useEffect(() => {
-    if (!selectedId) return;
-    const request = new AbortController();
-    photoLoad.current = { ownerId: selectedId, request };
-    void supabase.functions.invoke<{ photoUrl: string | null }>("admin-users", {
-      body: { action: "get-owner-photo", userId: selectedId },
-      signal: request.signal,
-    }).then(({ data, error }) => {
-      if (!request.signal.aborted && !error && data) {
-        setOwnerPhotos((current) => ({ ...current, [selectedId]: data.photoUrl }));
-      }
-    });
-    return () => request.abort();
-  }, [selectedId]);
-
-  const changeOwnerPhoto = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.currentTarget.files?.[0];
-    event.currentTarget.value = "";
-    if (!file || !selected || uploadingPhoto) return;
-    if (!file.size || !PHOTO_TYPES.includes(file.type)) {
-      toast.error("Choose a JPG, PNG, or WebP profile photo.");
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("Profile photos must be 5 MB or smaller.");
-      return;
-    }
-
-    const ownerId = selected.id;
-    const body = new FormData();
-    body.set("userId", ownerId);
-    body.set("photo", file);
-    setUploadingPhoto(true);
-    try {
-      const { data, error } = await supabase.functions.invoke<{ photoUrl: string }>("admin-users", { body });
-      if (error) {
-        const details = error instanceof FunctionsHttpError ? await error.context.json().catch(() => null) : null;
-        throw new Error(typeof details?.error === "string" ? details.error : error.message);
-      }
-      if (!data?.photoUrl) throw new Error("The server did not confirm the photo update.");
-      if (photoLoad.current?.ownerId === ownerId) photoLoad.current.request.abort();
-      setOwnerPhotos((current) => ({ ...current, [ownerId]: data.photoUrl }));
-      toast.success("Owner profile photo updated.");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to change the owner photo.");
-    } finally {
-      setUploadingPhoto(false);
-    }
-  };
 
   const filtered = useMemo(() => {
     const search = query.trim().toLowerCase();
@@ -528,9 +460,7 @@ const Owners = () => {
                 className="grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2.5 px-3.5 py-3.5 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary sm:px-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,0.95fr)_minmax(0,1.35fr)_48px_88px_84px_132px] xl:gap-4 xl:px-5"
               >
                 <div className="order-1 flex min-w-0 items-center gap-2.5 xl:order-none">
-                  <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary-soft text-[11px] font-bold text-primary">
-                    {initials(owner.name)}
-                  </span>
+                  <AdminOwnerAvatar ownerId={owner.id} name={owner.name} className="size-9 rounded-xl bg-primary-soft text-[11px] text-primary" />
                   <div className="min-w-0">
                     <p className="truncate text-[12.5px] font-bold text-foreground">
                       {owner.name}
@@ -635,19 +565,8 @@ const Owners = () => {
           {selected ? (
             <>
               <DialogHeader className="pr-9 text-left">
-                <div className="flex justify-end">
-                  <Button type="button" variant="outline" size="sm" className="h-8 rounded-lg text-[11px]" disabled={uploadingPhoto} onClick={() => photoInput.current?.click()}>
-                    <span aria-hidden="true">📷</span>{uploadingPhoto ? "Uploading…" : "Change Photo"}
-                  </Button>
-                  <input ref={photoInput} type="file" accept={PHOTO_TYPES.join(",")} onChange={(event) => void changeOwnerPhoto(event)} hidden />
-                </div>
                 <div className="flex items-center gap-3">
-                  <span className="relative grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-primary-soft text-[12px] font-bold text-primary">
-                    {initials(selected.name)}
-                    {ownerPhotos[selected.id] ? (
-                      <img src={ownerPhotos[selected.id] ?? undefined} alt={`${selected.name} profile photo`} className="absolute inset-0 size-full object-cover" />
-                    ) : null}
-                  </span>
+                  <AdminOwnerAvatar ownerId={selected.id} name={selected.name} className="size-11 rounded-xl bg-primary-soft text-primary" />
                   <div className="min-w-0 flex-1">
                     <DialogTitle className="break-words text-[16px] font-extrabold tracking-[-0.02em]">
                       {selected.name}
@@ -692,21 +611,65 @@ const Owners = () => {
                     </div>
                     {(petsByOwner.get(selected.id)?.length ?? 0) > 0 ? (
                       <ul className="divide-y divide-border rounded-xl border border-border bg-card">
-                        {petsByOwner.get(selected.id)?.map((pet) => (
-                          <li key={pet.id} className="flex min-w-0 items-center gap-2.5 p-2.5">
-                            <PetPhoto src={pet.photo_url ?? undefined} alt={pet.name} species={pet.species === "Cat" ? "Cat" : "Dog"} className="size-11 shrink-0 rounded-lg" />
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                <p className="truncate text-[11.5px] font-bold text-foreground">{pet.name}</p>
-                                <StatusPill status={pet.status === "approved" ? "approved" : pet.status === "rejected" ? "rejected" : "pending"} />
+                        {petsByOwner.get(selected.id)?.map((pet) => {
+                          const species = pet.species === "Cat" ? "Cat" : "Dog";
+                          const petStatus = pet.status === "approved" || pet.status === "rejected" ? pet.status : "pending";
+                          return (
+                            <li key={pet.id} className="relative flex min-w-0 items-center gap-2.5 rounded-lg p-2.5 hover:bg-secondary/50">
+                              <PetPhoto src={pet.photo_url ?? undefined} alt={pet.name} species={species} className="size-11 shrink-0 rounded-lg" />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <p className="truncate text-[11.5px] font-bold text-foreground">{pet.name}</p>
+                                  <StatusPill status={petStatus} />
+                                  {pet.impound_claimed_at ? <ImpoundClaimBadge /> : null}
+                                </div>
+                                <p className="truncate text-[9.5px] text-muted-foreground">{pet.breed} · {pet.species} · {pet.sex} · {pet.age}</p>
+                                <p className="num mt-0.5 truncate text-[9px] text-muted-foreground">
+                                  Pet ID: {pet.pet_id ?? "Pending"}
+                                </p>
                               </div>
-                              <p className="truncate text-[9.5px] text-muted-foreground">{pet.breed} · {pet.species} · {pet.sex} · {pet.age}</p>
-                              <p className="num mt-0.5 truncate text-[9px] text-muted-foreground">
-                                Pet ID: {pet.pet_id ?? "Pending"}
-                              </p>
-                            </div>
-                          </li>
-                        ))}
+                              <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <button type="button" aria-label={`View ${pet.name}'s pet profile`} className="absolute inset-0 cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring" />
+                                </DialogTrigger>
+                                <DialogContent className="max-h-[90dvh] w-[calc(100%-2rem)] grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden rounded-xl border-border bg-card p-0 sm:max-w-[520px]">
+                                  <DialogHeader className="px-6 pb-4 pt-5 pr-12 text-left">
+                                    <DialogClose asChild>
+                                      <Button type="button" size="sm" variant="ghost" className="w-fit px-1">
+                                        <ChevronLeft className="size-4" />Back to owner
+                                      </Button>
+                                    </DialogClose>
+                                    <DialogTitle>Pet profile</DialogTitle>
+                                    <DialogDescription>Pet registration and vaccination history.</DialogDescription>
+                                  </DialogHeader>
+                                  <ScrollArea type="hover" className="min-h-0">
+                                    <div tabIndex={0} role="region" aria-label="Pet profile information" className="space-y-4 px-6 pb-6 pt-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
+                                      <PetProfileDetails pet={{
+                                        id: pet.id,
+                                        name: pet.name,
+                                        species,
+                                        breed: pet.breed,
+                                        gender: pet.sex === "Female" ? "Female" : "Male",
+                                        age: pet.age,
+                                        weight: pet.weight,
+                                        color: pet.color,
+                                        photoUrl: pet.photo_url,
+                                        status: petStatus,
+                                        impoundClaimed: Boolean(pet.impound_claimed_at),
+                                        owner: selected.name,
+                                        phone: selected.phone,
+                                        registered: new Date(pet.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }),
+                                        petId: pet.pet_id,
+                                        qrCode: pet.qr_code,
+                                      }} />
+                                    </div>
+                                  </ScrollArea>
+                                </DialogContent>
+                              </Dialog>
+                            </li>
+                          );
+                        })}
                       </ul>
                     ) : (
                       <p className="rounded-xl border border-dashed border-border px-3 py-4 text-center text-[10px] text-muted-foreground">No pet profiles linked to this owner yet.</p>

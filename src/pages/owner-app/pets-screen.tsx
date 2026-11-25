@@ -1,6 +1,7 @@
 import { Clock, Pencil, Plus } from "lucide-react";
 import { PetPhoto } from "@/components/owner-app/pet-photo";
 import type { OwnerPet } from "@/data/owner-app";
+import { ImpoundClaimBadge } from "@/components/veticare/impound-claim-badge";
 
 interface PetsScreenProps {
   pets: OwnerPet[];
@@ -73,6 +74,7 @@ export function PetsScreen({ pets, loading, onAddPet, onOpenPet, onEditPet }: Pe
                   {pet.breed} • {pet.age} • {pet.sex}
                 </p>
                 <div className="mt-1 flex flex-wrap gap-1">
+                  {pet.impoundClaimed ? <ImpoundClaimBadge /> : null}
                     {pet.tags.slice(0, 2).map((tag) => (
                     <span
                       key={tag}

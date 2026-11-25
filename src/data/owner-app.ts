@@ -30,6 +30,7 @@ export interface OwnerPet {
   ownerBarangay?: string;
   registered: string;
   registrationStatus?: "pending" | "approved" | "rejected";
+  impoundClaimed?: boolean;
   photoUrl?: string;
   tags: string[];
   nextDue: { title: string; date: string; days: number };

@@ -24,6 +24,7 @@ export interface PersonnelPet {
   contact: string;
   barangay: string;
   registration: RegistrationState;
+  impoundClaimed?: boolean;
   registeredOn: string;
   validThrough: string;
   vaccination: VaccinationState;

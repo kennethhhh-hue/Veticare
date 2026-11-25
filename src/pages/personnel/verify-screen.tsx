@@ -5,6 +5,7 @@ import { PetPhoto } from "@/components/owner-app/pet-photo";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { PetRecord } from "@/pages/personnel/pet-record";
+import { ImpoundClaimBadge } from "@/components/veticare/impound-claim-badge";
 import {
   registrationLabels,
   type PersonnelPet,
@@ -191,7 +192,7 @@ export function VerifyScreen({
                     className="size-[42px] shrink-0 rounded-lg ring-1 ring-border"
                   />
                   <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1.5">
+                    <span className="flex flex-wrap items-center gap-1.5">
                       <span className="truncate text-[12px] font-bold text-foreground">
                         {pet.name}
                       </span>
@@ -203,6 +204,7 @@ export function VerifyScreen({
                       >
                         {registrationLabels[pet.registration]}
                       </span>
+                      {pet.impoundClaimed ? <ImpoundClaimBadge /> : null}
                     </span>
                     <span className="num mt-0.5 block truncate text-[9px] text-muted-foreground">
                       {pet.id} • {pet.owner}

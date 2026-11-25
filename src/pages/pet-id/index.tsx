@@ -33,9 +33,10 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { type PetIdRecord, type PetIdStatus } from "@/data/shelter-records";
+import { ImpoundClaimBadge } from "@/components/veticare/impound-claim-badge";
 import { supabase } from "@/integrations/supabase/client";
 
-type RegistryPetIdRecord = PetIdRecord & { recordId: string; photoUrl?: string; qrCode?: string };
+type RegistryPetIdRecord = PetIdRecord & { recordId: string; photoUrl?: string; qrCode?: string; impoundClaimed?: boolean };
 
 const PAGE_SIZE = 5;
 
@@ -59,7 +60,7 @@ const PetId = () => {
     setLoading(true);
     setLoadError(null);
     const [{ data: pets, error: petsError }, { data: profiles, error: profilesError }] = await Promise.all([
-      supabase.from("pets").select("id, owner_id, name, species, breed, pet_id, photo_url, qr_code, status, pet_id_status, pet_id_issued_at, pet_id_valid_through").in("status", ["pending", "approved"]).order("created_at", { ascending: false }),
+      supabase.from("pets").select("id, owner_id, name, species, breed, pet_id, photo_url, qr_code, status, pet_id_status, pet_id_issued_at, pet_id_valid_through, impound_claimed_at").in("status", ["pending", "approved"]).order("created_at", { ascending: false }),
       supabase.from("profiles").select("id, full_name, email, barangay").eq("role", "owner"),
     ]);
     const error = petsError ?? profilesError;
@@ -81,6 +82,7 @@ const PetId = () => {
       return {
         recordId: pet.id,
         photoUrl: pet.photo_url ?? undefined,
+        impoundClaimed: Boolean(pet.impound_claimed_at),
         qrCode: pet.qr_code ?? undefined,
         id: pet.pet_id || `Pending • ${pet.id.slice(0, 8)}`,
         pet: pet.name,
@@ -378,6 +380,7 @@ const PetId = () => {
                   <PetPhoto src={record.photoUrl} alt={record.pet} species={record.species} className="size-9 shrink-0 rounded-lg" />
                   <div className="min-w-0">
                     <p className="truncate text-[12.5px] font-bold text-foreground">{record.pet}</p>
+                    {record.impoundClaimed ? <ImpoundClaimBadge /> : null}
                     <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
                       {record.breed} • {record.species}
                     </p>
@@ -515,9 +518,10 @@ const PetId = () => {
                         <p className="text-[10.5px] text-muted-foreground">
                           {selected.breed} • {selected.species}
                         </p>
-                        <span className="num mt-1 inline-block rounded-md bg-primary-soft px-1.5 py-0.5 text-[9px] font-bold text-primary">
-                          {selected.id}
-                        </span>
+                        <div className="mt-1 flex flex-wrap items-center gap-1">
+                          <span className="num rounded-md bg-primary-soft px-1.5 py-0.5 text-[9px] font-bold text-primary">{selected.id}</span>
+                          {selected.impoundClaimed ? <ImpoundClaimBadge /> : null}
+                        </div>
                       </div>
                     </div>
 

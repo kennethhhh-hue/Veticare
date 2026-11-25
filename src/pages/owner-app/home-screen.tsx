@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { PetPhoto } from "@/components/owner-app/pet-photo";
 import { AccountAvatar } from "@/components/veticare/account-avatar";
 import { type AdoptablePet, type OwnerPet } from "@/data/owner-app";
+import { ImpoundClaimBadge } from "@/components/veticare/impound-claim-badge";
 import type { AppTab } from "@/pages/owner-app/app-tab";
 import { PHILIPPINE_TIME_ZONE } from "@/lib/philippine-date";
 
@@ -206,6 +207,7 @@ export function HomeScreen({
               </div>
 
               <div className="p-3">
+                {pet.impoundClaimed ? <ImpoundClaimBadge className="mb-2" /> : null}
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="text-[8.5px] font-bold uppercase tracking-[0.12em] text-muted-foreground/80">

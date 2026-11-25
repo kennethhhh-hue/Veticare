@@ -127,7 +127,7 @@ function SidebarBody({
         <Brand compact />
         
       </div>
-      <div className="scroll-slim min-h-0 flex-1 overflow-y-auto pb-4">
+      <div className={cn(onNavigate ? "popup-scroll" : "scroll-slim", "min-h-0 flex-1 overflow-y-auto pb-4")}>
         <NavList onNavigate={onNavigate} counts={counts} />
       </div>
       <SidebarFooter name={name} role={role} photoUrl={photoUrl} />

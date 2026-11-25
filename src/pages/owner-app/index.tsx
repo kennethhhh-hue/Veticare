@@ -126,6 +126,7 @@ const OwnerApp = () => {
       validThrough: pet.pet_id_valid_through,
       registered: pet.status === "approved" ? new Date(pet.created_at).toLocaleDateString(undefined, { month: "short", year: "numeric" }) : "Pending review",
       registrationStatus: pet.status as "pending" | "approved" | "rejected",
+      impoundClaimed: Boolean(pet.impound_claimed_at),
       tags: [pet.status === "approved" ? "Registered" : pet.status === "rejected" ? "Needs update" : "Pending review"],
       nextDue: { title: "No reminders yet", date: "Available after registration", days: 0 },
       vaccines: vaccinesByPet.get(pet.id) ?? [],
@@ -313,7 +314,7 @@ const OwnerApp = () => {
                   }}
                 />
               ) : idPet ? (
-                <PetIdScreen pet={idPet} ownerName={profile.fullName} onBack={() => setIdPet(null)} />
+                <PetIdScreen pet={pets.find((pet) => pet.id === idPet.id) ?? idPet} ownerName={profile.fullName} onBack={() => setIdPet(null)} />
               ) : openPet ? (
                 <PetDetail
                   pet={pets.find((pet) => pet.id === openPet.id) ?? openPet}

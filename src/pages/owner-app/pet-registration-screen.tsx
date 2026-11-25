@@ -1,9 +1,9 @@
-import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
-import { ArrowLeft, ImagePlus, PawPrint, UploadCloud, X } from "lucide-react";
+import { useState, type FormEvent } from "react";
+import { ArrowLeft, PawPrint, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { PetPhotoPicker } from "@/components/veticare/pet-photo-picker";
 import type { OwnerPet } from "@/data/owner-app";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -21,38 +21,12 @@ export function PetRegistrationScreen({ onBack, onCreated }: PetRegistrationScre
   const [weight, setWeight] = useState("");
   const [color, setColor] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
-  const [photoPreviewOpen, setPhotoPreviewOpen] = useState(false);
-
-  useEffect(() => {
-    if (!photo) {
-      setPhotoPreview(null);
-      return;
-    }
-    const previewUrl = URL.createObjectURL(photo);
-    setPhotoPreview(previewUrl);
-    return () => URL.revokeObjectURL(previewUrl);
-  }, [photo]);
-
-  const handlePhotoChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0] ?? null;
+  const handlePhotoChange = (file: File | null) => {
     setError(null);
     setUploadProgress(null);
-    if (file && !["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-      setPhoto(null);
-      setError("Choose a JPG, PNG, or WebP image.");
-      event.target.value = "";
-      return;
-    }
-    if (file && file.size > 5 * 1024 * 1024) {
-      setPhoto(null);
-      setError("The pet photo must be 5 MB or smaller.");
-      event.target.value = "";
-      return;
-    }
     setPhoto(file);
   };
 
@@ -188,29 +162,7 @@ export function PetRegistrationScreen({ onBack, onCreated }: PetRegistrationScre
       <form onSubmit={handleSubmit} className="space-y-3.5 px-5 pt-4">
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2 space-y-1.5">
-            <Label htmlFor="pet-photo">Pet photo (optional)</Label>
-            <div className="flex items-center gap-3 rounded-xl border border-dashed border-border bg-card p-3">
-              {photoPreview ? (
-                <button
-                  type="button"
-                  onClick={() => setPhotoPreviewOpen(true)}
-                  className="shrink-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                  aria-label="Preview selected pet photo"
-                >
-                  <img src={photoPreview} alt="Selected pet" className="size-16 rounded-lg object-cover" />
-                </button>
-              ) : (
-                <label htmlFor="pet-photo" className="grid size-16 shrink-0 cursor-pointer place-items-center rounded-lg bg-secondary text-muted-foreground">
-                  <ImagePlus className="size-5" />
-                </label>
-              )}
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[12px] font-semibold text-foreground">{photo?.name ?? "Choose a pet photo"}</span>
-                <span className="mt-0.5 block text-[10px] text-muted-foreground">JPG, PNG, or WebP, up to 5 MB</span>
-              </span>
-              {photo ? <label htmlFor="pet-photo" className="shrink-0 cursor-pointer text-[10px] font-bold text-primary">Change</label> : null}
-            </div>
-            <Input id="pet-photo" type="file" accept="image/jpeg,image/png,image/webp" onChange={handlePhotoChange} className="sr-only" />
+            <PetPhotoPicker photo={photo} onPhotoChange={handlePhotoChange} disabled={saving} />
             {saving && uploadProgress !== null ? (
               <div className="space-y-1.5" role="status" aria-live="polite">
                 <div className="flex items-center justify-between text-[10px] font-semibold text-muted-foreground">
@@ -272,19 +224,6 @@ export function PetRegistrationScreen({ onBack, onCreated }: PetRegistrationScre
           {saving ? "Submitting…" : "Submit pet registration"}
         </Button>
       </form>
-
-      <Dialog open={photoPreviewOpen} onOpenChange={setPhotoPreviewOpen}>
-        <DialogContent className="max-w-[min(92vw,560px)] overflow-hidden rounded-2xl p-3">
-          <DialogHeader className="sr-only">
-            <DialogTitle>Pet photo preview</DialogTitle>
-            <DialogDescription>Preview of the selected pet photo.</DialogDescription>
-          </DialogHeader>
-          {photoPreview ? <img src={photoPreview} alt={`${name || "Selected pet"} photo preview`} className="max-h-[75vh] w-full rounded-xl object-contain" /> : null}
-          <Button type="button" variant="outline" onClick={() => setPhotoPreviewOpen(false)} className="w-full">
-            <X className="size-4" />Close preview
-          </Button>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

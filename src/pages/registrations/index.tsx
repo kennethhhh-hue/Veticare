@@ -21,11 +21,12 @@ import { MetricStrip } from "@/components/admin/metric-strip";
 import { FilterSelect } from "@/components/admin/filter-select";
 import { StatusPill } from "@/components/admin/status-pill";
 import { Pagination } from "@/components/admin/pagination";
-import { PetVaccinationRecords } from "@/components/admin/pet-vaccination-records";
+import { PetProfileDetails } from "@/components/admin/pet-profile-details";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Tooltip,
@@ -102,6 +103,7 @@ const Registrations = () => {
         weight: pet.weight,
         color: pet.color,
         photoUrl: pet.photo_url,
+        impoundClaimed: Boolean(pet.impound_claimed_at),
         owner: owner?.full_name || owner?.email || "Pet owner",
         phone: owner?.phone || "—",
         petId: pet.pet_id,
@@ -678,100 +680,67 @@ const Registrations = () => {
       </Dialog>
 
       <Dialog open={Boolean(detailTarget)} onOpenChange={(open) => { if (!open) { setDetailTarget(null); setEditingDetails(false); } }}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto rounded-xl border-border bg-card sm:max-w-[520px]">
-          <DialogHeader>
+        <DialogContent className="max-h-[90dvh] w-[calc(100%-2rem)] grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden rounded-xl border-border bg-card p-0 sm:max-w-[520px]">
+          <DialogHeader className="px-6 pb-4 pt-5 pr-12 text-left">
             <DialogTitle>Pet registration details</DialogTitle>
             <DialogDescription>{editingDetails ? "Update the pet profile details." : "Review the submitted pet and owner information."}</DialogDescription>
           </DialogHeader>
           {detailTarget ? (
-            <div className="space-y-4">
-              {editingDetails ? (
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="col-span-2 space-y-1.5">
-                    <Label htmlFor="detail-pet-name">Pet name</Label>
-                    <Input id="detail-pet-name" value={detailDraft.name} maxLength={80} onChange={(event) => setDetailDraft((current) => ({ ...current, name: event.target.value }))} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="detail-pet-species">Species</Label>
-                    <select id="detail-pet-species" value={detailDraft.species} onChange={(event) => setDetailDraft((current) => ({ ...current, species: event.target.value as "Dog" | "Cat" }))} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
-                      <option value="Dog">Dog</option><option value="Cat">Cat</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="detail-pet-sex">Sex</Label>
-                    <select id="detail-pet-sex" value={detailDraft.gender} onChange={(event) => setDetailDraft((current) => ({ ...current, gender: event.target.value as "Male" | "Female" }))} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
-                      <option value="Male">Male</option><option value="Female">Female</option>
-                    </select>
-                  </div>
-                  <div className="col-span-2 space-y-1.5">
-                    <Label htmlFor="detail-pet-breed">Breed</Label>
-                    <Input id="detail-pet-breed" value={detailDraft.breed} maxLength={100} onChange={(event) => setDetailDraft((current) => ({ ...current, breed: event.target.value }))} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="detail-pet-age">Age</Label>
-                    <Input id="detail-pet-age" value={detailDraft.age} maxLength={40} onChange={(event) => setDetailDraft((current) => ({ ...current, age: event.target.value }))} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="detail-pet-weight">Weight</Label>
-                    <Input id="detail-pet-weight" value={detailDraft.weight} maxLength={30} onChange={(event) => setDetailDraft((current) => ({ ...current, weight: event.target.value }))} />
-                  </div>
-                  <div className="col-span-2 space-y-1.5">
-                    <Label htmlFor="detail-pet-color">Color / markings</Label>
-                    <Input id="detail-pet-color" value={detailDraft.color} maxLength={80} onChange={(event) => setDetailDraft((current) => ({ ...current, color: event.target.value }))} />
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="flex items-center gap-3">
-                    <PetPhoto src={detailTarget.photoUrl ?? undefined} alt={detailTarget.name} species={detailTarget.species} className="size-20 shrink-0 rounded-xl" />
-                    <div className="min-w-0">
-                      <p className="truncate text-lg font-bold text-foreground">{detailTarget.name}</p>
-                      <p className="text-xs text-muted-foreground">{detailTarget.breed} · {detailTarget.species} · {detailTarget.gender}</p>
-                      <div className="mt-2"><StatusPill status={detailTarget.status} /></div>
+            <ScrollArea type="hover" className="min-h-0">
+              <div tabIndex={0} role="region" aria-label="Pet registration information" className="space-y-4 px-6 pb-6 pt-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
+                {editingDetails ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="col-span-2 space-y-1.5">
+                      <Label htmlFor="detail-pet-name">Pet name</Label>
+                      <Input id="detail-pet-name" value={detailDraft.name} maxLength={80} onChange={(event) => setDetailDraft((current) => ({ ...current, name: event.target.value }))} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="detail-pet-species">Species</Label>
+                      <select id="detail-pet-species" value={detailDraft.species} onChange={(event) => setDetailDraft((current) => ({ ...current, species: event.target.value as "Dog" | "Cat" }))} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                        <option value="Dog">Dog</option><option value="Cat">Cat</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="detail-pet-sex">Sex</Label>
+                      <select id="detail-pet-sex" value={detailDraft.gender} onChange={(event) => setDetailDraft((current) => ({ ...current, gender: event.target.value as "Male" | "Female" }))} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                        <option value="Male">Male</option><option value="Female">Female</option>
+                      </select>
+                    </div>
+                    <div className="col-span-2 space-y-1.5">
+                      <Label htmlFor="detail-pet-breed">Breed</Label>
+                      <Input id="detail-pet-breed" value={detailDraft.breed} maxLength={100} onChange={(event) => setDetailDraft((current) => ({ ...current, breed: event.target.value }))} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="detail-pet-age">Age</Label>
+                      <Input id="detail-pet-age" value={detailDraft.age} maxLength={40} onChange={(event) => setDetailDraft((current) => ({ ...current, age: event.target.value }))} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="detail-pet-weight">Weight</Label>
+                      <Input id="detail-pet-weight" value={detailDraft.weight} maxLength={30} onChange={(event) => setDetailDraft((current) => ({ ...current, weight: event.target.value }))} />
+                    </div>
+                    <div className="col-span-2 space-y-1.5">
+                      <Label htmlFor="detail-pet-color">Color / markings</Label>
+                      <Input id="detail-pet-color" value={detailDraft.color} maxLength={80} onChange={(event) => setDetailDraft((current) => ({ ...current, color: event.target.value }))} />
                     </div>
                   </div>
-                  <dl className="grid grid-cols-2 gap-2">
-                    {[
-                      ["Age", detailTarget.age || "Not provided"],
-                      ["Weight", detailTarget.weight || "Not provided"],
-                      ["Color / markings", detailTarget.color || "Not provided"],
-                      ["Owner", detailTarget.owner],
-                      ["Contact", detailTarget.phone],
-                      ["Submitted", detailTarget.registered],
-                      ["Pet ID", detailTarget.petId || "Assigned on approval"],
-                    ].map(([label, value]) => (
-                      <div key={label} className="min-w-0 rounded-lg bg-secondary/60 p-2.5">
-                        <dt className="text-[9px] font-bold uppercase text-muted-foreground">{label}</dt>
-                        <dd className="mt-1 break-words text-[11px] font-semibold text-foreground">{value}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                  <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-3">
-                    <div className="min-w-0">
-                      <p className="text-[9px] font-bold uppercase text-muted-foreground">QR code</p>
-                      <p className="mt-1 break-all text-[10px] font-semibold text-foreground">{detailTarget.qrCode || "Available after approval"}</p>
-                    </div>
-                    {detailTarget.qrCode ? <QRCodeSVG value={detailTarget.qrCode} size={88} level="M" marginSize={1} className="shrink-0 rounded bg-white p-1" title={`QR code for ${detailTarget.petId ?? detailTarget.name}`} /> : null}
+                ) : <PetProfileDetails pet={detailTarget} />}
+                {editingDetails ? (
+                  <div className="flex gap-2">
+                    <Button variant="outline" className="flex-1" onClick={() => setEditingDetails(false)}>Cancel</Button>
+                    <Button className="flex-1" disabled={savingDetails} onClick={() => void saveRegistrationDetails()}>{savingDetails ? "Saving…" : "Save profile"}</Button>
                   </div>
-                  <PetVaccinationRecords key={detailTarget.id} petId={detailTarget.id} />
-                </>
-              )}
-              {editingDetails ? (
-                <div className="flex gap-2">
-                  <Button variant="outline" className="flex-1" onClick={() => setEditingDetails(false)}>Cancel</Button>
-                  <Button className="flex-1" disabled={savingDetails} onClick={() => void saveRegistrationDetails()}>{savingDetails ? "Saving…" : "Save profile"}</Button>
-                </div>
-              ) : (
-                <Button variant="outline" className="w-full" onClick={() => setEditingDetails(true)}>
-                  <Pencil className="size-4" />Edit profile
-                </Button>
-              )}
-              {detailTarget.status === "pending" ? (
-                !editingDetails ? <Button className="w-full" onClick={() => { beginApproval(detailTarget); setDetailTarget(null); }}>
-                  <Check className="size-4" />Issue QR code and approve
-                </Button> : null
-              ) : null}
-            </div>
+                ) : (
+                  <Button variant="outline" className="w-full" onClick={() => setEditingDetails(true)}>
+                    <Pencil className="size-4" />Edit profile
+                  </Button>
+                )}
+                {detailTarget.status === "pending" ? (
+                  !editingDetails ? <Button className="w-full" onClick={() => { beginApproval(detailTarget); setDetailTarget(null); }}>
+                    <Check className="size-4" />Issue QR code and approve
+                  </Button> : null
+                ) : null}
+              </div>
+            </ScrollArea>
           ) : null}
         </DialogContent>
       </Dialog>

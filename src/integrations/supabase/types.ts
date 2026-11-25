@@ -3426,6 +3426,7 @@ export type Database = {
           color: string
           created_at: string
           id: string
+          impound_claimed_at: string | null
           name: string
           owner_id: string
           pet_id: string | null
@@ -3447,6 +3448,7 @@ export type Database = {
           color?: string
           created_at?: string
           id?: string
+          impound_claimed_at?: string | null
           name: string
           owner_id: string
           pet_id?: string | null
@@ -3468,6 +3470,7 @@ export type Database = {
           color?: string
           created_at?: string
           id?: string
+          impound_claimed_at?: string | null
           name?: string
           owner_id?: string
           pet_id?: string | null
@@ -3576,6 +3579,7 @@ export type Database = {
           animal_type: string
           area: string
           breed: string
+          claimed_pet_record_id: string | null
           color: string
           created_at: string
           id: string
@@ -3599,6 +3603,7 @@ export type Database = {
           animal_type: string
           area: string
           breed: string
+          claimed_pet_record_id?: string | null
           color: string
           created_at?: string
           id?: string
@@ -3622,6 +3627,7 @@ export type Database = {
           animal_type?: string
           area?: string
           breed?: string
+          claimed_pet_record_id?: string | null
           color?: string
           created_at?: string
           id?: string
@@ -3824,6 +3830,14 @@ export type Database = {
       }
     }
     Functions: {
+      claim_impound: {
+        Args: { p_impound_id: string; p_pet_record_id: string }
+        Returns: Database["public"]["Tables"]["impounds"]["Row"][]
+      }
+      find_impound_claim_pets: {
+        Args: { p_impound_id: string; p_search: string }
+        Returns: { pet_record_id: string; pet_name: string; pet_id: string | null; breed: string; owner_name: string | null; owner_email: string | null; barangay: string }[]
+      }
       find_rfid_tag_assignment: {
         Args: { p_exclude_pet_id?: string; p_rfid_tag: string }
         Returns: { pet_id: string; pet_name: string }[]

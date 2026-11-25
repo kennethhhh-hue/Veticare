@@ -17,7 +17,10 @@ import { MetricStrip } from "@/components/admin/metric-strip";
 import { FilterSelect } from "@/components/admin/filter-select";
 import { Pagination } from "@/components/admin/pagination";
 import { PersonnelImpoundReports } from "@/components/admin/personnel-impound-reports";
+import { ImpoundClaimForm } from "@/components/admin/impound-claim-form";
 import { PetPhoto } from "@/components/owner-app/pet-photo";
+import { PetPhotoPicker } from "@/components/veticare/pet-photo-picker";
+import { ImpoundClaimBadge } from "@/components/veticare/impound-claim-badge";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -40,6 +43,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { getPetPhotoError, petPhotoTypes } from "@/lib/pet-photo";
 import {
   type ImpoundedDog,
   type ImpoundStatus,
@@ -49,7 +53,12 @@ import { useAuth } from "@/integrations/supabase/auth-context";
 import { sidebarCountKeys } from "@/data/veticare";
 
 const PAGE_SIZE = 5;
-const photoTypes = ["image/jpeg", "image/png", "image/webp"];
+const photoStorage = supabase.storage.from("veticare-pet-photos");
+
+const impoundPhotoPath = (userId: string, photo: File) => {
+  const extension = photo.type === "image/jpeg" ? "jpg" : photo.type.split("/")[1];
+  return `${userId}/impounds/${crypto.randomUUID()}.${extension}`;
+};
 
 const adoptionLabel = {
   not_available: "Not available",
@@ -59,7 +68,7 @@ const adoptionLabel = {
 };
 
 const getAdoptionLabel = (dog: ImpoundedDog) =>
-  dog.adoptionStatus === "available" && dog.impoundStatus !== "impounded"
+  dog.impoundStatus === "claimed" || (dog.adoptionStatus === "available" && dog.impoundStatus !== "impounded")
     ? adoptionLabel.not_available
     : adoptionLabel[dog.adoptionStatus];
 
@@ -84,6 +93,7 @@ const mapImpoundRow = (row: {
   kennel: string;
   impounded_at: string;
   impound_status: string;
+  claimed_pet_record_id: string | null;
   adoption_status: string;
   photo_url: string | null;
   status: string;
@@ -114,6 +124,7 @@ const mapImpoundRow = (row: {
     dateImpounded: displayDate,
     locationFound: row.area,
     impoundStatus: row.impound_status as ImpoundedDog["impoundStatus"],
+    claimedPetRecordId: row.claimed_pet_record_id ?? undefined,
     adoptionStatus: row.adoption_status as ImpoundedDog["adoptionStatus"],
     photoUrl: row.photo_url ?? undefined,
     status: row.status as ImpoundStatus,
@@ -138,11 +149,15 @@ const ImpoundedDogs = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<ImpoundedDog | null>(null);
+  const [claimOpen, setClaimOpen] = useState(false);
+  const [savingClaim, setSavingClaim] = useState(false);
+  const [claimedProfile, setClaimedProfile] = useState<{ impoundId: string; name: string; owner: string } | null>(null);
   const photoInput = useRef<HTMLInputElement>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [vaccineName, setVaccineName] = useState<string | null>(null);
   const [savingVaccination, setSavingVaccination] = useState(false);
   const [intakeOpen, setIntakeOpen] = useState(false);
+  const [intakePhoto, setIntakePhoto] = useState<File | null>(null);
   const [savingIntake, setSavingIntake] = useState(false);
   const [adoptionUpdateId, setAdoptionUpdateId] = useState<string | null>(null);
   const [adoptedTarget, setAdoptedTarget] = useState<ImpoundedDog | null>(null);
@@ -167,6 +182,21 @@ const ImpoundedDogs = () => {
     return () => window.removeEventListener("focus", loadImpounds);
   }, [loadImpounds]);
 
+  const selectedId = selected?.id;
+  const selectedClaim = selected?.claimedPetRecordId;
+  useEffect(() => {
+    if (!selectedId || !selectedClaim) return;
+    let active = true;
+    void (async () => {
+      const { data } = await supabase.rpc("find_impound_claim_pets", { p_impound_id: selectedId, p_search: "" });
+      const pet = data?.find((row) => row.pet_record_id === selectedClaim);
+      if (active && pet) {
+        setClaimedProfile({ impoundId: selectedId, name: pet.pet_name, owner: pet.owner_name || pet.owner_email || "Pet owner" });
+      }
+    })();
+    return () => { active = false; };
+  }, [selectedId, selectedClaim]);
+
   const filtered = useMemo(() => {
     const search = query.trim().toLowerCase();
     return [...rows]
@@ -179,7 +209,7 @@ const ImpoundedDogs = () => {
             .includes(search);
         const matchesStatus = status === "all" || dog.impoundStatus === status;
         const matchesSex = sex === "all" || dog.sex === sex;
-        const matchesStay = !longStay || dog.days >= 30;
+        const matchesStay = !longStay || (dog.impoundStatus === "impounded" && dog.days >= 30);
         const matchesVaccine = !unvaccinated || !dog.vaccinated;
         return matchesQuery && matchesStatus && matchesSex && matchesStay && matchesVaccine;
       });
@@ -212,6 +242,34 @@ const ImpoundedDogs = () => {
     void queryClient.invalidateQueries({ queryKey: sidebarCountKeys.impounded });
   };
 
+  const claimImpound = async (dog: ImpoundedDog, petRecordId: string) => {
+    if (savingClaim) return;
+    setSavingClaim(true);
+    const { data, error } = await supabase.rpc("claim_impound", {
+      p_impound_id: dog.id,
+      p_pet_record_id: petRecordId,
+    }).single();
+    setSavingClaim(false);
+    if (error || !data) {
+      toast.error(error?.message ?? "Unable to record the impound claim.");
+      return;
+    }
+
+    const record = mapImpoundRow(data);
+    setRows((current) => current.map((item) => item.id === record.id ? record : item));
+    setSelected((current) => current?.id === record.id ? record : current);
+    setClaimOpen(false);
+    void queryClient.invalidateQueries({ queryKey: sidebarCountKeys.impounded });
+    toast.success(`${record.name} was marked Impound Claimed.`);
+  };
+
+  const closeImpoundDetails = () => {
+    if (savingVaccination || savingClaim) return;
+    setSelected(null);
+    setVaccineName(null);
+    setClaimOpen(false);
+  };
+
   const updateAdoptionStatus = async (dog: ImpoundedDog, next: "available" | "adopted") => {
     setAdoptionUpdateId(dog.id);
     const { data, error } = await supabase.from("impounds")
@@ -242,36 +300,73 @@ const ImpoundedDogs = () => {
 
   const logImpound = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (savingIntake) return;
     if (!intake.location) { toast.error("Select a Batangas City barangay."); return; }
+    const userId = session?.user.id;
+    if (intakePhoto && !userId) {
+      toast.error("Sign in again to upload the impound photo.");
+      return;
+    }
+
     setSavingIntake(true);
     const impoundId = `IMP-${Date.now().toString().slice(-8)}`;
     const petId = `PET-${Date.now().toString().slice(-8)}`;
-    const { data, error } = await supabase.from("impounds").insert({
-      impound_id: impoundId,
-      pet_id: petId,
-      animal_type: intake.type,
-      name: intake.name.trim(),
-      breed: intake.breed.trim(),
-      sex: intake.sex,
-      age: intake.age.trim(),
-      color: intake.color.trim(),
-      area: intake.location.trim(),
-      impounded_at: intake.date,
-      adoption_status: "not_available",
-      notes: "",
-    }).select("*").single();
-    setSavingIntake(false);
-    if (error) {
-      toast.error(error.message);
-      return;
+    try {
+      let photoPath: string | undefined;
+      let photoUrl: string | undefined;
+      if (intakePhoto && userId) {
+        photoPath = impoundPhotoPath(userId, intakePhoto);
+        const { error } = await photoStorage.upload(photoPath, intakePhoto, { contentType: intakePhoto.type });
+        if (error) throw new Error(error.message);
+        photoUrl = photoStorage.getPublicUrl(photoPath).data.publicUrl;
+      }
+
+      const { data, error } = await supabase.from("impounds").insert({
+        impound_id: impoundId,
+        pet_id: petId,
+        animal_type: intake.type,
+        name: intake.name.trim(),
+        breed: intake.breed.trim(),
+        sex: intake.sex,
+        age: intake.age.trim(),
+        color: intake.color.trim(),
+        area: intake.location.trim(),
+        impounded_at: intake.date,
+        adoption_status: "not_available",
+        notes: "",
+        ...(photoUrl ? { photo_url: photoUrl } : {}),
+      }).select("*").single();
+
+      let row = data;
+      if (error || !row) {
+        const check = await supabase.from("impounds").select("*").eq("impound_id", impoundId).maybeSingle();
+        if (photoUrl && check.data?.photo_url === photoUrl) {
+          row = check.data;
+        } else {
+          if (photoPath && !check.error) await photoStorage.remove([photoPath]);
+          throw new Error(error?.message ?? "Unable to save the impound record.");
+        }
+      }
+
+      const record = mapImpoundRow(row);
+      void queryClient.invalidateQueries({ queryKey: sidebarCountKeys.impounded });
+      setRows((current) => [record, ...current.filter((item) => item.id !== record.id)]);
+      setPage(1);
+      setIntake({ name: "", type: "Dog", breed: "", sex: "Male", age: "", color: "", date: new Date().toISOString().slice(0, 10), location: "" });
+      setIntakePhoto(null);
+      setIntakeOpen(false);
+      toast.success(`${record.name} added to the impound register.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to save the impound record.");
+    } finally {
+      setSavingIntake(false);
     }
-    const record = mapImpoundRow(data);
-    void queryClient.invalidateQueries({ queryKey: sidebarCountKeys.impounded });
-    setRows((current) => [record, ...current]);
-    setPage(1);
-    setIntake({ name: "", type: "Dog", breed: "", sex: "Male", age: "", color: "", date: new Date().toISOString().slice(0, 10), location: "" });
-    setIntakeOpen(false);
-    toast.success(`${record.name} added to the impound register.`);
+  };
+
+  const handleIntakeOpenChange = (open: boolean) => {
+    if (savingIntake) return;
+    if (!open) setIntakePhoto(null);
+    setIntakeOpen(open);
   };
 
   const saveVaccination = async (dog: ImpoundedDog, name: string | null) => {
@@ -297,8 +392,9 @@ const ImpoundedDogs = () => {
     const photo = event.currentTarget.files?.[0];
     event.currentTarget.value = "";
     if (!photo || !selected || uploadingPhoto) return;
-    if (!photo.size || !photoTypes.includes(photo.type) || photo.size > 5 * 1024 * 1024) {
-      toast.error("Choose a JPG, PNG, or WebP photo up to 5 MB.");
+    const validationError = getPetPhotoError(photo);
+    if (validationError) {
+      toast.error(validationError);
       return;
     }
     const userId = session?.user.id;
@@ -308,20 +404,18 @@ const ImpoundedDogs = () => {
     }
 
     const { id } = selected;
-    const extension = photo.type === "image/jpeg" ? "jpg" : photo.type.split("/")[1];
-    const path = `${userId}/impounds/${crypto.randomUUID()}.${extension}`;
-    const storage = supabase.storage.from("veticare-pet-photos");
+    const path = impoundPhotoPath(userId, photo);
     setUploadingPhoto(true);
     try {
-      const { error: uploadError } = await storage.upload(path, photo, { contentType: photo.type });
+      const { error: uploadError } = await photoStorage.upload(path, photo, { contentType: photo.type });
       if (uploadError) throw uploadError;
-      const photoUrl = storage.getPublicUrl(path).data.publicUrl;
+      const photoUrl = photoStorage.getPublicUrl(path).data.publicUrl;
       const { data, error } = await supabase.from("impounds").update({ photo_url: photoUrl })
         .eq("id", id).select("photo_url").maybeSingle();
       if (error || !data) {
         const check = await supabase.from("impounds").select("photo_url").eq("id", id).maybeSingle();
         if (check.data?.photo_url !== photoUrl) {
-          if (!check.error) await storage.remove([path]);
+          if (!check.error) await photoStorage.remove([path]);
           throw new Error(error?.message ?? "Unable to save the impound photo.");
         }
       }
@@ -335,23 +429,24 @@ const ImpoundedDogs = () => {
     }
   };
 
+  const animalsInCare = rows.filter((dog) => dog.impoundStatus === "impounded");
   const metrics = [
     {
-      label: "Dogs in care",
-      value: rows.length,
+      label: "Animals in care",
+      value: animalsInCare.length,
       hint: "Across all shelters",
       icon: PawPrint,
       tone: "primary" as const,
     },
     {
       label: "For Adoption",
-      value: rows.filter((dog) => dog.impoundStatus === "impounded" && dog.adoptionStatus === "available").length,
+      value: animalsInCare.filter((dog) => dog.adoptionStatus === "available").length,
       icon: HeartHandshake,
       tone: "warning" as const,
     },
     {
       label: "Longest stay",
-      value: `${Math.max(0, ...rows.map((dog) => dog.days))}d`,
+      value: `${Math.max(0, ...animalsInCare.map((dog) => dog.days))}d`,
       hint: "Needs a home",
       icon: Clock,
       tone: "neutral" as const,
@@ -400,7 +495,7 @@ const ImpoundedDogs = () => {
               options={[
                 { value: "all", label: "All" },
                 { value: "impounded", label: "Impounded" },
-                { value: "claimed", label: "Claimed" },
+                { value: "claimed", label: "Impound Claimed" },
                 { value: "released", label: "Released" },
               ]}
             />
@@ -593,7 +688,9 @@ const ImpoundedDogs = () => {
                 </div>
 
                 <div className="order-2 xl:order-none">
-                  <span className="rounded-full bg-secondary px-2 py-1 text-[9px] font-bold capitalize text-foreground">{dog.impoundStatus}</span>
+                  {dog.impoundStatus === "claimed" ? <ImpoundClaimBadge /> : (
+                    <span className="rounded-full bg-secondary px-2 py-1 text-[9px] font-bold capitalize text-foreground">{dog.impoundStatus}</span>
+                  )}
                 </div>
 
                 <div className="order-4 col-span-2 flex flex-wrap items-center justify-end gap-1 xl:order-none xl:col-span-1 xl:justify-start">
@@ -652,10 +749,10 @@ const ImpoundedDogs = () => {
       </section>
 
       <p className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10.5px] text-muted-foreground/80">
-          {rows.filter((dog) => dog.days >= 30).length} dogs have been in care for 30+ days
+          {animalsInCare.filter((dog) => dog.days >= 30).length} animals have been in care for 30+ days
       </p>
 
-      <Dialog open={Boolean(selected)} onOpenChange={(open) => { if (!open && !savingVaccination) { setSelected(null); setVaccineName(null); } }}>
+      <Dialog open={Boolean(selected)} onOpenChange={(open) => { if (!open) closeImpoundDetails(); }}>
         <DialogContent className="max-h-[88vh] w-[calc(100%-2rem)] max-w-[480px] overflow-y-auto rounded-2xl border-border p-5 sm:rounded-2xl">
           {selected ? (
             <>
@@ -681,12 +778,13 @@ const ImpoundedDogs = () => {
                   <Button type="button" size="sm" variant="outline" disabled={uploadingPhoto} onClick={() => photoInput.current?.click()}>
                     {uploadingPhoto ? "Uploading…" : selected.photoUrl ? "Change adoption photo" : "Add adoption photo"}
                   </Button>
-                  <input ref={photoInput} type="file" accept={photoTypes.join(",")} onChange={(event) => void changePhoto(event)} hidden />
+                  <input ref={photoInput} type="file" accept={petPhotoTypes.join(",")} onChange={(event) => void changePhoto(event)} hidden />
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="num rounded-full bg-secondary px-2 py-1 text-[10px] font-semibold text-secondary-foreground">
-                    {selected.days} days in care
+                    {selected.impoundStatus === "impounded" ? `${selected.days} days in care` : "Intake closed"}
                   </span>
+                  {selected.impoundStatus === "claimed" ? <ImpoundClaimBadge /> : null}
                 </div>
 
                 <div className="divide-y divide-border rounded-2xl border border-border bg-card">
@@ -698,7 +796,11 @@ const ImpoundedDogs = () => {
                     { label: "Color", value: selected.color },
                     { label: "Date impounded", value: selected.dateImpounded },
                     { label: "Location found", value: selected.locationFound },
-                    { label: "Impound status", value: selected.impoundStatus },
+                    { label: "Impound status", value: selected.impoundStatus === "claimed" ? "Impound Claimed" : selected.impoundStatus },
+                    ...(claimedProfile?.impoundId === selected.id ? [
+                      { label: "Linked pet profile", value: claimedProfile.name },
+                      { label: "Owner", value: claimedProfile.owner },
+                    ] : []),
                     { label: "Adoption status", value: getAdoptionLabel(selected) },
                     {
                       label: "Vaccination",
@@ -726,6 +828,19 @@ const ImpoundedDogs = () => {
                 </div>
 
                 <div className="flex flex-col gap-2">
+                  {claimOpen ? (
+                    <ImpoundClaimForm
+                      key={selected.id}
+                      impoundId={selected.id}
+                      saving={savingClaim}
+                      onCancel={() => setClaimOpen(false)}
+                      onConfirm={(petRecordId) => void claimImpound(selected, petRecordId)}
+                    />
+                  ) : selected.impoundStatus === "impounded" || (selected.impoundStatus === "claimed" && !selected.claimedPetRecordId) ? (
+                    <Button type="button" variant="outline" onClick={() => setClaimOpen(true)}>
+                      {selected.impoundStatus === "claimed" ? "Link owner’s pet profile" : "Mark as claimed"}
+                    </Button>
+                  ) : null}
                   {vaccineName !== null ? (
                     <form className="space-y-2 rounded-xl border border-border p-3" onSubmit={(event) => { event.preventDefault(); void saveVaccination(selected, vaccineName); }}>
                       <Label htmlFor="impound-vaccine">Vaccine name</Label>
@@ -745,7 +860,8 @@ const ImpoundedDogs = () => {
                   )}
                   <Button
                     variant="outline"
-                    onClick={() => setSelected(null)}
+                    disabled={savingClaim || savingVaccination}
+                    onClick={closeImpoundDetails}
                     className="h-10 w-full rounded-xl border-border text-[12px] font-semibold"
                   >
                     Close record
@@ -772,22 +888,27 @@ const ImpoundedDogs = () => {
         </AlertDialogContent>
       </AlertDialog>
 
-      <Dialog open={intakeOpen} onOpenChange={setIntakeOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto rounded-xl border-border bg-card sm:max-w-[560px]">
+      <Dialog open={intakeOpen} onOpenChange={handleIntakeOpenChange}>
+        <DialogContent showCloseButton={!savingIntake} className="max-h-[90vh] overflow-y-auto rounded-xl border-border bg-card sm:max-w-[560px]">
           <DialogHeader>
             <DialogTitle>Log impounded animal</DialogTitle>
             <DialogDescription>Create an intake record in the shelter register.</DialogDescription>
           </DialogHeader>
-          <form onSubmit={logImpound} className="grid grid-cols-2 gap-3">
-            <div className="col-span-2 space-y-1.5"><Label htmlFor="intake-name">Animal name</Label><Input id="intake-name" required value={intake.name} onChange={(event) => setIntake((current) => ({ ...current, name: event.target.value }))} /></div>
-            <div className="space-y-1.5"><Label htmlFor="intake-type">Animal type</Label><select id="intake-type" value={intake.type} onChange={(event) => setIntake((current) => ({ ...current, type: event.target.value as "Dog" | "Cat" }))} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"><option>Dog</option><option>Cat</option></select></div>
-            <div className="space-y-1.5"><Label htmlFor="intake-sex">Sex</Label><select id="intake-sex" value={intake.sex} onChange={(event) => setIntake((current) => ({ ...current, sex: event.target.value as "Male" | "Female" }))} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"><option>Male</option><option>Female</option></select></div>
-            <div className="space-y-1.5"><Label htmlFor="intake-breed">Breed</Label><Input id="intake-breed" required value={intake.breed} onChange={(event) => setIntake((current) => ({ ...current, breed: event.target.value }))} /></div>
-            <div className="space-y-1.5"><Label htmlFor="intake-age">Age</Label><Input id="intake-age" required value={intake.age} onChange={(event) => setIntake((current) => ({ ...current, age: event.target.value }))} placeholder="e.g. 2 yrs" /></div>
-            <div className="space-y-1.5"><Label htmlFor="intake-color">Color</Label><Input id="intake-color" required value={intake.color} onChange={(event) => setIntake((current) => ({ ...current, color: event.target.value }))} /></div>
-            <div className="space-y-1.5"><Label htmlFor="intake-date">Date impounded</Label><Input id="intake-date" type="date" required value={intake.date} onChange={(event) => setIntake((current) => ({ ...current, date: event.target.value }))} /></div>
-            <div className="col-span-2 space-y-1.5"><Label htmlFor="intake-location">Location found</Label><BarangaySelect id="intake-location" required value={intake.location} onValueChange={(location) => setIntake((current) => ({ ...current, location }))} /></div>
-            <div className="col-span-2 flex justify-end gap-2 pt-2"><Button type="button" variant="outline" onClick={() => setIntakeOpen(false)}>Cancel</Button><Button type="submit" disabled={savingIntake}><Plus className="size-4" />{savingIntake ? "Saving…" : "Save intake"}</Button></div>
+          <form onSubmit={logImpound} aria-busy={savingIntake}>
+            <fieldset disabled={savingIntake} className="grid min-w-0 grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <PetPhotoPicker photo={intakePhoto} onPhotoChange={setIntakePhoto} disabled={savingIntake} />
+              </div>
+              <div className="col-span-2 space-y-1.5"><Label htmlFor="intake-name">Animal name</Label><Input id="intake-name" required value={intake.name} onChange={(event) => setIntake((current) => ({ ...current, name: event.target.value }))} /></div>
+              <div className="space-y-1.5"><Label htmlFor="intake-type">Animal type</Label><select id="intake-type" value={intake.type} onChange={(event) => setIntake((current) => ({ ...current, type: event.target.value as "Dog" | "Cat" }))} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"><option>Dog</option><option>Cat</option></select></div>
+              <div className="space-y-1.5"><Label htmlFor="intake-sex">Sex</Label><select id="intake-sex" value={intake.sex} onChange={(event) => setIntake((current) => ({ ...current, sex: event.target.value as "Male" | "Female" }))} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"><option>Male</option><option>Female</option></select></div>
+              <div className="space-y-1.5"><Label htmlFor="intake-breed">Breed</Label><Input id="intake-breed" required value={intake.breed} onChange={(event) => setIntake((current) => ({ ...current, breed: event.target.value }))} /></div>
+              <div className="space-y-1.5"><Label htmlFor="intake-age">Age</Label><Input id="intake-age" required value={intake.age} onChange={(event) => setIntake((current) => ({ ...current, age: event.target.value }))} placeholder="e.g. 2 yrs" /></div>
+              <div className="space-y-1.5"><Label htmlFor="intake-color">Color</Label><Input id="intake-color" required value={intake.color} onChange={(event) => setIntake((current) => ({ ...current, color: event.target.value }))} /></div>
+              <div className="space-y-1.5"><Label htmlFor="intake-date">Date impounded</Label><Input id="intake-date" type="date" required value={intake.date} onChange={(event) => setIntake((current) => ({ ...current, date: event.target.value }))} /></div>
+              <div className="col-span-2 space-y-1.5"><Label htmlFor="intake-location">Location found</Label><BarangaySelect id="intake-location" required value={intake.location} onValueChange={(location) => setIntake((current) => ({ ...current, location }))} /></div>
+              <div className="col-span-2 flex justify-end gap-2 pt-2"><Button type="button" variant="outline" onClick={() => handleIntakeOpenChange(false)}>Cancel</Button><Button type="submit" disabled={savingIntake}><Plus className="size-4" />{savingIntake ? "Saving…" : "Save intake"}</Button></div>
+            </fieldset>
           </form>
         </DialogContent>
       </Dialog>
