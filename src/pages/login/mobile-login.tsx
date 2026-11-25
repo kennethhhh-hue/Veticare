@@ -61,8 +61,9 @@ export function MobileLogin({ variant }: MobileLoginProps) {
   const config = content[variant];
   const Icon = config.icon;
 
-  const [email, setEmail] = useState(config.email);
+  const [email, setEmail] = useState<string>(config.email);
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [remember, setRemember] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,6 +80,10 @@ export function MobileLogin({ variant }: MobileLoginProps) {
       setError("Password must be at least 6 characters.");
       return;
     }
+    if (creatingAccount && password !== confirmPassword) {
+      setError(confirmPassword ? "Passwords do not match." : "Confirm your password.");
+      return;
+    }
 
     setError(null);
     setSubmitting(true);
@@ -93,6 +98,7 @@ export function MobileLogin({ variant }: MobileLoginProps) {
         setError(signUpError.message);
         return;
       }
+      setConfirmPassword("");
       if (data.session) {
         toast.success("Owner account created.");
         navigate("/app", { replace: true });
@@ -219,7 +225,7 @@ export function MobileLogin({ variant }: MobileLoginProps) {
                         <Input
                           id={`${variant}-password`}
                           type={showPassword ? "text" : "password"}
-                          autoComplete="current-password"
+                          autoComplete={creatingAccount ? "new-password" : "current-password"}
                           value={password}
                           onChange={(event) => setPassword(event.target.value)}
                           placeholder={config.passwordHint}
@@ -234,10 +240,29 @@ export function MobileLogin({ variant }: MobileLoginProps) {
                           {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                         </button>
                       </div>
-                      {error ? (
-                        <p className="text-[10.5px] font-medium text-destructive">{error}</p>
-                      ) : null}
                     </div>
+
+                    {creatingAccount ? (
+                      <div className="space-y-1.5">
+                        <Label htmlFor="owner-confirm-password" className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                          Confirm password
+                        </Label>
+                        <div className="relative">
+                          <Lock className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/70" />
+                          <Input
+                            id="owner-confirm-password"
+                            type={showPassword ? "text" : "password"}
+                            autoComplete="new-password"
+                            value={confirmPassword}
+                            onChange={(event) => setConfirmPassword(event.target.value)}
+                            placeholder="Re-enter your password"
+                            className="h-11 rounded-xl border-input bg-card pl-9 pr-3 text-[12.5px] focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-0"
+                            required
+                          />
+                        </div>
+                      </div>
+                    ) : null}
+                    {error ? <p className="text-[10.5px] font-medium text-destructive" role="alert">{error}</p> : null}
 
                     <div className="flex items-center gap-2">
                       <Checkbox
@@ -286,6 +311,7 @@ export function MobileLogin({ variant }: MobileLoginProps) {
                       onClick={() => {
                         if (variant === "owner") {
                           setCreatingAccount((current) => !current);
+                          setConfirmPassword("");
                           setError(null);
                           return;
                         }

@@ -3388,6 +3388,25 @@ export type Database = {
           { foreignKeyName: "personnel_verifications_verified_by_fkey"; columns: ["verified_by"]; referencedRelation: "profiles"; referencedColumns: ["id"] },
         ]
       }
+      owner_service_requests: {
+        Row: { id: string; owner_id: string; pet_record_id: string; request_type: "visit" | "pet-detail-change" | "annual-registration" | "free-vaccination"; preferred_date: string | null; details: string; status: "submitted" | "completed" | "declined"; created_at: string; reviewed_at: string | null; reviewed_by: string | null }
+        Insert: { id?: string; owner_id?: string; pet_record_id: string; request_type: "visit" | "pet-detail-change" | "annual-registration" | "free-vaccination"; preferred_date?: string | null; details?: string; status?: "submitted" | "completed" | "declined"; created_at?: string; reviewed_at?: string | null; reviewed_by?: string | null }
+        Update: { status?: "submitted" | "completed" | "declined"; reviewed_at?: string | null; reviewed_by?: string | null }
+        Relationships: [
+          { foreignKeyName: "owner_service_requests_owner_id_fkey"; columns: ["owner_id"]; referencedRelation: "profiles"; referencedColumns: ["id"] },
+          { foreignKeyName: "owner_service_requests_pet_record_id_fkey"; columns: ["pet_record_id"]; referencedRelation: "pets"; referencedColumns: ["id"] },
+          { foreignKeyName: "owner_service_requests_reviewed_by_fkey"; columns: ["reviewed_by"]; referencedRelation: "profiles"; referencedColumns: ["id"] },
+        ]
+      }
+      pet_vaccinations: {
+        Row: { id: string; pet_record_id: string; vaccine_name: string; administered_on: string; recorded_by: string; created_at: string }
+        Insert: { id?: string; pet_record_id: string; vaccine_name: string; administered_on: string; recorded_by?: string; created_at?: string }
+        Update: { vaccine_name?: string; administered_on?: string }
+        Relationships: [
+          { foreignKeyName: "pet_vaccinations_pet_record_id_fkey"; columns: ["pet_record_id"]; referencedRelation: "pets"; referencedColumns: ["id"] },
+          { foreignKeyName: "pet_vaccinations_recorded_by_fkey"; columns: ["recorded_by"]; referencedRelation: "profiles"; referencedColumns: ["id"] },
+        ]
+      }
       personnel_review_flags: {
         Row: { id: string; pet_record_id: string; reported_by: string; scan_id: string | null; status: string; request_type: "general" | "vaccination" | "registration"; vaccine_name: string | null; last_vaccination_date: string | null; created_at: string; resolved_at: string | null; resolved_by: string | null }
         Insert: { id?: string; pet_record_id: string; reported_by?: string; scan_id?: string | null; status?: string; request_type?: "general" | "vaccination" | "registration"; vaccine_name?: string | null; last_vaccination_date?: string | null; created_at?: string; resolved_at?: string | null; resolved_by?: string | null }
@@ -3807,6 +3826,10 @@ export type Database = {
       }
       resolve_personnel_review_flag: {
         Args: { p_flag_id: string }
+        Returns: boolean
+      }
+      review_owner_service_request: {
+        Args: { p_request_id: string; p_status: "completed" | "declined" }
         Returns: boolean
       }
     }

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import {
   ArrowLeft,
   CalendarClock,
@@ -13,8 +13,8 @@ import { toast } from "sonner";
 import { PetPhoto } from "@/components/owner-app/pet-photo";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { OwnerPet } from "@/data/owner-app";
-import type { OwnerRequest } from "@/lib/owner-preview-store";
+import type { OwnerPet, OwnerRequestInput } from "@/data/owner-app";
+import { getPhilippineDateKey } from "@/lib/philippine-date";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,7 +24,7 @@ interface PetDetailProps {
   pet: OwnerPet;
   onBack: () => void;
   onShowId: (pet: OwnerPet) => void;
-  onRequest: (request: OwnerRequest) => void;
+  onRequest: (request: OwnerRequestInput) => Promise<boolean>;
 }
 
 export function PetDetail({ pet, onBack, onShowId, onRequest }: PetDetailProps) {
@@ -36,54 +36,41 @@ export function PetDetail({ pet, onBack, onShowId, onRequest }: PetDetailProps) 
   const [annualDate, setAnnualDate] = useState("");
   const [vaccineDate, setVaccineDate] = useState("");
   const [changeDetails, setChangeDetails] = useState("");
+  const requestLock = useRef(false);
+  const [savingRequest, setSavingRequest] = useState(false);
 
-  const submitVisit = (event: FormEvent<HTMLFormElement>) => {
+  const submitRequest = async (
+    event: FormEvent<HTMLFormElement>,
+    request: Omit<OwnerRequestInput, "petId">,
+    reset: () => void,
+  ) => {
     event.preventDefault();
-    onRequest({ id: `REQ-${Date.now()}`, type: "visit", petId: pet.id, petName: pet.name, submittedAt: new Date().toISOString(), details: visitDate, status: "submitted" });
-    setVisitOpen(false);
-    setVisitDate("");
-    toast.success(`Sample visit request sent for ${pet.name}.`);
+    if (requestLock.current) return;
+    if (request.type === "pet-detail-change" && !request.details) {
+      toast.error("Enter the details you want corrected.");
+      return;
+    }
+    if (request.preferredDate && request.preferredDate < getPhilippineDateKey()) {
+      toast.error("Choose today or a future date.");
+      return;
+    }
+    requestLock.current = true;
+    setSavingRequest(true);
+    try {
+      if (await onRequest({ ...request, petId: pet.id })) {
+        reset();
+        toast.success(`Request submitted for ${pet.name}.`);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to submit the request.");
+    } finally {
+      requestLock.current = false;
+      setSavingRequest(false);
+    }
   };
 
-  const submitChange = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    onRequest({ id: `REQ-${Date.now()}`, type: "pet-detail-change", petId: pet.id, petName: pet.name, submittedAt: new Date().toISOString(), details: changeDetails.trim(), status: "submitted" });
-    setChangeOpen(false);
-    setChangeDetails("");
-    toast.success(`Detail change request sent for ${pet.name}.`);
-  };
-
-  const submitAnnualRegistration = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    onRequest({
-      id: `REQ-${Date.now()}`,
-      type: "annual-registration",
-      petId: pet.id,
-      petName: pet.name,
-      submittedAt: new Date().toISOString(),
-      details: `Annual registration renewal requested${annualDate ? ` for ${annualDate}` : ""}. RFID on file: ${pet.rfidTag || "not assigned yet"}.`,
-      status: "submitted",
-    });
-    setAnnualOpen(false);
-    setAnnualDate("");
-    setAnnualRfid(pet.rfidTag ?? "");
-    toast.success(`Annual registration request submitted for ${pet.name}.`);
-  };
-
-  const submitFreeVaccination = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    onRequest({
-      id: `REQ-${Date.now()}`,
-      type: "free-vaccination",
-      petId: pet.id,
-      petName: pet.name,
-      submittedAt: new Date().toISOString(),
-      details: `Free vaccination clinic requested${vaccineDate ? ` for ${vaccineDate}` : ""}. RFID on file: ${pet.rfidTag || "not assigned yet"}.`,
-      status: "submitted",
-    });
-    setVaccineOpen(false);
-    setVaccineDate("");
-    toast.success(`Free vaccination request submitted for ${pet.name}.`);
+  const changeDialog = (setOpen: (open: boolean) => void) => (open: boolean) => {
+    if (!requestLock.current) setOpen(open);
   };
 
   return (
@@ -191,7 +178,7 @@ export function PetDetail({ pet, onBack, onShowId, onRequest }: PetDetailProps) 
           </div>
           {pet.vaccines.length ? <ul className="mt-2.5 space-y-2">
             {pet.vaccines.map((vaccine) => (
-              <li key={vaccine.name} className="flex items-center gap-2.5">
+              <li key={`${vaccine.name}-${vaccine.date}`} className="flex items-center gap-2.5">
                 <span
                   className={cn(
                     "grid size-6 shrink-0 place-items-center rounded-full",
@@ -224,7 +211,7 @@ export function PetDetail({ pet, onBack, onShowId, onRequest }: PetDetailProps) 
                 </span>
               </li>
             ))}
-          </ul> : <p className="mt-2.5 text-[10px] leading-relaxed text-muted-foreground">Vaccination history is not available in the database yet.</p>}
+          </ul> : <p className="mt-2.5 text-[10px] leading-relaxed text-muted-foreground">{pet.vaccinationsUnavailable ? "Vaccination records are currently unavailable." : "No vaccination records linked yet."}</p>}
         </div>
 
         <Button
@@ -245,44 +232,43 @@ export function PetDetail({ pet, onBack, onShowId, onRequest }: PetDetailProps) 
         </button>
       </div>
 
-      <Dialog open={visitOpen} onOpenChange={setVisitOpen}>
+      <Dialog open={visitOpen} onOpenChange={changeDialog(setVisitOpen)}>
         <DialogContent className="rounded-xl border-border bg-card sm:max-w-[420px]">
-          <DialogHeader><DialogTitle>Book a vet visit</DialogTitle><DialogDescription>Submit a sample appointment request for {pet.name}.</DialogDescription></DialogHeader>
-          <form onSubmit={submitVisit} className="space-y-3">
-            <div className="space-y-1.5"><Label htmlFor="visit-date">Preferred date</Label><Input id="visit-date" type="date" min={new Date().toISOString().slice(0, 10)} value={visitDate} onChange={(event) => setVisitDate(event.target.value)} required /></div>
-            <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setVisitOpen(false)}>Cancel</Button><Button type="submit">Submit request</Button></div>
+          <DialogHeader><DialogTitle>Book a vet visit</DialogTitle><DialogDescription>Submit a preferred appointment date for {pet.name} for review.</DialogDescription></DialogHeader>
+          <form onSubmit={(event) => void submitRequest(event, { type: "visit", preferredDate: visitDate }, () => { setVisitOpen(false); setVisitDate(""); })} className="space-y-3">
+            <div className="space-y-1.5"><Label htmlFor="visit-date">Preferred date</Label><Input id="visit-date" type="date" min={getPhilippineDateKey()} value={visitDate} onChange={(event) => setVisitDate(event.target.value)} required /></div>
+            <div className="flex justify-end gap-2"><Button type="button" variant="outline" disabled={savingRequest} onClick={() => setVisitOpen(false)}>Cancel</Button><Button type="submit" disabled={savingRequest}>{savingRequest ? "Submitting…" : "Submit request"}</Button></div>
           </form>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={changeOpen} onOpenChange={setChangeOpen}>
+      <Dialog open={changeOpen} onOpenChange={changeDialog(setChangeOpen)}>
         <DialogContent className="rounded-xl border-border bg-card sm:max-w-[420px]">
           <DialogHeader><DialogTitle>Request a detail change</DialogTitle><DialogDescription>Tell the City Veterinary Office what needs correction for {pet.name}.</DialogDescription></DialogHeader>
-          <form onSubmit={submitChange} className="space-y-3">
+          <form onSubmit={(event) => void submitRequest(event, { type: "pet-detail-change", details: changeDetails.trim() }, () => { setChangeOpen(false); setChangeDetails(""); })} className="space-y-3">
             <div className="space-y-1.5"><Label htmlFor="change-details">Details to update</Label><Textarea id="change-details" value={changeDetails} onChange={(event) => setChangeDetails(event.target.value)} required maxLength={500} placeholder="Describe the correction and the correct information." /></div>
-            <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setChangeOpen(false)}>Cancel</Button><Button type="submit">Submit request</Button></div>
+            <div className="flex justify-end gap-2"><Button type="button" variant="outline" disabled={savingRequest} onClick={() => setChangeOpen(false)}>Cancel</Button><Button type="submit" disabled={savingRequest}>{savingRequest ? "Submitting…" : "Submit request"}</Button></div>
           </form>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={annualOpen} onOpenChange={setAnnualOpen}>
+      <Dialog open={annualOpen} onOpenChange={changeDialog(setAnnualOpen)}>
         <DialogContent className="rounded-xl border-border bg-card sm:max-w-[420px]">
-          <DialogHeader><DialogTitle>Annual registration renewal</DialogTitle><DialogDescription>Request an annual registration check for {pet.name}. The City Veterinary Office will review the sample request.</DialogDescription></DialogHeader>
-          <form onSubmit={submitAnnualRegistration} className="space-y-3">
+          <DialogHeader><DialogTitle>Annual registration renewal</DialogTitle><DialogDescription>Request an annual registration check for {pet.name}.</DialogDescription></DialogHeader>
+          <form onSubmit={(event) => void submitRequest(event, { type: "annual-registration", preferredDate: annualDate }, () => { setAnnualOpen(false); setAnnualDate(""); })} className="space-y-3">
             <div className="rounded-lg border border-border bg-secondary/50 p-2.5 text-[10px] text-muted-foreground">Pet ID: {pet.petId} • Admin-assigned RFID: {pet.rfidTag || "Not assigned yet"}</div>
-            <div className="space-y-1.5"><Label htmlFor="annual-date">Preferred visit date <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="annual-date" type="date" min={new Date().toISOString().slice(0, 10)} value={annualDate} onChange={(event) => setAnnualDate(event.target.value)} /></div>
-            <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setAnnualOpen(false)}>Cancel</Button><Button type="submit">Submit renewal request</Button></div>
+            <div className="space-y-1.5"><Label htmlFor="annual-date">Preferred visit date <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="annual-date" type="date" min={getPhilippineDateKey()} value={annualDate} onChange={(event) => setAnnualDate(event.target.value)} /></div>
+            <div className="flex justify-end gap-2"><Button type="button" variant="outline" disabled={savingRequest} onClick={() => setAnnualOpen(false)}>Cancel</Button><Button type="submit" disabled={savingRequest}>{savingRequest ? "Submitting…" : "Submit renewal request"}</Button></div>
           </form>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={vaccineOpen} onOpenChange={setVaccineOpen}>
+      <Dialog open={vaccineOpen} onOpenChange={changeDialog(setVaccineOpen)}>
         <DialogContent className="rounded-xl border-border bg-card sm:max-w-[420px]">
           <DialogHeader><DialogTitle>Free vaccination request</DialogTitle><DialogDescription>Request a slot at a City Veterinary Office free vaccination clinic for {pet.name}.</DialogDescription></DialogHeader>
-          <form onSubmit={submitFreeVaccination} className="space-y-3">
-            <div className="rounded-lg border border-info/20 bg-info/5 p-2.5 text-[10px] leading-relaxed text-muted-foreground">The request is a local preview only. Clinic availability and eligibility must be confirmed by the City Veterinary Office.</div>
-            <div className="space-y-1.5"><Label htmlFor="vaccine-date">Preferred clinic date <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="vaccine-date" type="date" min={new Date().toISOString().slice(0, 10)} value={vaccineDate} onChange={(event) => setVaccineDate(event.target.value)} /></div>
-            <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setVaccineOpen(false)}>Cancel</Button><Button type="submit">Request free vaccination</Button></div>
+          <form onSubmit={(event) => void submitRequest(event, { type: "free-vaccination", preferredDate: vaccineDate }, () => { setVaccineOpen(false); setVaccineDate(""); })} className="space-y-3">
+            <div className="space-y-1.5"><Label htmlFor="vaccine-date">Preferred clinic date <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="vaccine-date" type="date" min={getPhilippineDateKey()} value={vaccineDate} onChange={(event) => setVaccineDate(event.target.value)} /></div>
+            <div className="flex justify-end gap-2"><Button type="button" variant="outline" disabled={savingRequest} onClick={() => setVaccineOpen(false)}>Cancel</Button><Button type="submit" disabled={savingRequest}>{savingRequest ? "Submitting…" : "Request free vaccination"}</Button></div>
           </form>
         </DialogContent>
       </Dialog>

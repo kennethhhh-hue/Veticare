@@ -10,7 +10,7 @@ import { HistoryScreen } from "@/pages/personnel/history-screen";
 import { ProfileScreen } from "@/pages/personnel/profile-screen";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
-import { getPhilippineDateKey } from "@/lib/philippine-date";
+import { formatCalendarDate, getPhilippineDateKey } from "@/lib/philippine-date";
 import type { OwnerNotification } from "@/pages/owner-app/notifications-screen";
 import {
   scanFollowUpLabels,
@@ -249,9 +249,13 @@ const PersonnelApp = () => {
       }
 
       const ownerIds = [...new Set((petRows ?? []).map((pet) => pet.owner_id))];
-      const { data: profiles, error: profilesError } = ownerIds.length
-        ? await supabase.from("profiles").select("id, full_name, phone, barangay").in("id", ownerIds)
-        : { data: [], error: null };
+      const [{ data: profiles, error: profilesError }, vaccinationResult] = await Promise.all([
+        ownerIds.length
+          ? supabase.from("profiles").select("id, full_name, phone, barangay").in("id", ownerIds)
+          : { data: [], error: null },
+        supabase.from("pet_vaccinations").select("pet_record_id, vaccine_name, administered_on")
+          .order("administered_on", { ascending: false }).order("created_at", { ascending: false }),
+      ]);
       if (!active) return;
       if (profilesError) {
         console.error("Unable to load owner contact details:", profilesError.message);
@@ -260,9 +264,16 @@ const PersonnelApp = () => {
       }
 
       const profilesById = new Map((profiles ?? []).map((profile) => [profile.id, profile]));
+      const latestVaccinationByPet = new Map<string, { vaccine_name: string; administered_on: string }>();
+      for (const vaccination of vaccinationResult.data ?? []) {
+        if (!latestVaccinationByPet.has(vaccination.pet_record_id)) {
+          latestVaccinationByPet.set(vaccination.pet_record_id, vaccination);
+        }
+      }
       const currentDate = getPhilippineDateKey();
       const issuedPets: PersonnelPet[] = (petRows ?? []).map((pet) => {
         const ownerProfile = profilesById.get(pet.owner_id);
+        const vaccination = latestVaccinationByPet.get(pet.id);
         const expired = pet.pet_id_status === "expired" ||
           (pet.pet_id_valid_through != null && pet.pet_id_valid_through < currentDate);
         return {
@@ -283,7 +294,10 @@ const PersonnelApp = () => {
             ? new Date(`${pet.pet_id_valid_through}T12:00:00+08:00`).toLocaleDateString("en-PH", { dateStyle: "medium", timeZone: "Asia/Manila" })
             : "Not available",
           vaccination: "unknown",
-          lastVaccine: "No vaccination record linked",
+          lastVaccine: vaccination
+            ? `${vaccination.vaccine_name} · ${formatCalendarDate(vaccination.administered_on)}`
+            : vaccinationResult.error ? "Vaccination records unavailable" : "No vaccination record linked",
+          lastVaccinatedOn: vaccination?.administered_on,
           rfidTag: pet.rfid_tag,
           qrCode: pet.qr_code,
         };

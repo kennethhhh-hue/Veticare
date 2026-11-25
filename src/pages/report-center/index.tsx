@@ -158,32 +158,32 @@ const Reports = () => {
   const generate = async () => {
     setGenerating(true);
     const { start: startDate, end: endDate } = getPeriodBounds();
-    let rows: Record<string, unknown>[] = [];
+    let rows: CsvRow[] = [];
     let fetchError: string | null = null;
 
     if (genCategory === "Pet Registrations") {
       const result = await supabase.from("pets").select("id, owner_id, name, species, breed, age, sex, weight, color, status, pet_id, rfid_tag, qr_code, created_at, approved_at");
-      rows = (result.data ?? []) as unknown as Record<string, unknown>[];
+      rows = result.data ?? [];
       fetchError = result.error?.message ?? null;
     } else if (genCategory === "Owners") {
       const result = await supabase.from("profiles").select("id, email, full_name, phone, address, barangay, role, approval_status, created_at").eq("role", "owner");
-      rows = (result.data ?? []) as unknown as Record<string, unknown>[];
+      rows = result.data ?? [];
       fetchError = result.error?.message ?? null;
     } else if (genCategory === "Impounded Dogs") {
       const result = await supabase.from("impounds").select("id, impound_id, pet_id, animal_type, name, breed, sex, age, color, area, kennel, impounded_at, impound_status, adoption_status, status, vaccinated, notes, created_at");
-      rows = (result.data ?? []) as unknown as Record<string, unknown>[];
+      rows = result.data ?? [];
       fetchError = result.error?.message ?? null;
     } else if (genCategory === "Adoptions") {
       const result = await supabase.from("adoption_applications").select("id, application_id, applicant_id, impound_record_id, pet_name, pet_species, pet_breed, application_date, decision_date, home_visit_status, status, note, created_at");
-      rows = (result.data ?? []) as unknown as Record<string, unknown>[];
+      rows = result.data ?? [];
       fetchError = result.error?.message ?? null;
     } else if (genCategory === "Pet ID") {
       const result = await supabase.from("pets").select("id, owner_id, name, species, breed, pet_id, rfid_tag, qr_code, pet_id_status, pet_id_issued_at, pet_id_valid_through, status, created_at").not("pet_id", "is", null);
-      rows = (result.data ?? []) as unknown as Record<string, unknown>[];
+      rows = result.data ?? [];
       fetchError = result.error?.message ?? null;
     } else {
       const result = await supabase.from("admin_activity").select("id, entity_type, entity_id, event_type, actor_name, action, target, destination, created_at");
-      rows = (result.data ?? []) as unknown as Record<string, unknown>[];
+      rows = result.data ?? [];
       fetchError = result.error?.message ?? null;
     }
 
@@ -206,10 +206,6 @@ const Reports = () => {
       return;
     }
 
-    const csvRows = periodRows.map((row) => Object.fromEntries(Object.entries(row).map(([key, value]) => [
-      key,
-      value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? value : JSON.stringify(value),
-    ])));
     const { data: authData, error: authError } = await supabase.auth.getUser();
     if (authError || !authData.user) {
       setGenerating(false);
@@ -229,14 +225,14 @@ const Reports = () => {
       status: "ready",
       author_id: authData.user.id,
       author_name: authorProfile?.full_name || authorProfile?.email || authData.user.email || "Admin",
-      report_data: csvRows as unknown as Json,
+      report_data: periodRows,
     });
     if (saveError) {
       setGenerating(false);
       toast.error("Unable to save report to the library", { description: saveError.message });
       return;
     }
-    const downloaded = downloadCsv(`${safeName}.csv`, csvRows as Array<Record<string, string | number | null | undefined>>);
+    const downloaded = downloadCsv(`${safeName}.csv`, periodRows);
     setGenerating(false);
     await loadReports();
     if (downloaded) toast.success("Live report generated and saved.", { description: `${periodRows.length} rows • ${reportId}` });

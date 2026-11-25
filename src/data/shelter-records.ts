@@ -45,7 +45,7 @@ const impoundSamples = [
   { id: "IMP-303", name: "Luna", breed: "Aspin", sex: "Female", age: "4 yrs", color: "Cream", area: "Bagong Silang", kennel: "R-02", impounded: "Apr 28, 2026", impoundedAt: "2026-04-28", days: 16, status: "reserved", vaccinated: true, notes: "Adoption interview scheduled." },
   { id: "IMP-302", name: "Coco", breed: "Aspin", sex: "Female", age: "1 yr", color: "Brown", area: "Mabini", kennel: "R-03", impounded: "May 03, 2026", impoundedAt: "2026-05-03", days: 11, status: "reserved", vaccinated: true, notes: "Reserved by a barangay volunteer." },
   { id: "IMP-301", name: "Max", breed: "Golden mix", sex: "Male", age: "3 yrs", color: "Golden", area: "Poblacion", kennel: "R-04", impounded: "May 09, 2026", impoundedAt: "2026-05-09", days: 5, status: "reserved", vaccinated: true, notes: "Meet-and-greet booked for Saturday." },
-];
+] satisfies Omit<ImpoundedDog, "impoundId" | "petId" | "animalType" | "dateImpounded" | "locationFound" | "impoundStatus" | "adoptionStatus">[];
 
 export const impoundedDogs: ImpoundedDog[] = impoundSamples.map((dog) => ({
   ...dog,
@@ -94,7 +94,7 @@ const adoptionSamples = [
   { id: "AD-505", applicant: "Maria Santos", email: "maria.santos@email.com", phone: "0917 234 5678", pet: "Bella", petBreed: "Shih Tzu mix", species: "Dog", applied: "May 05, 2026", appliedAt: "2026-05-05", area: "Poblacion", homeVisit: "passed", status: "approved", note: "Approved; grooming plan confirmed." },
   { id: "AD-504", applicant: "Kevin Uy", email: "kevin.uy@email.com", phone: "0917 884 2299", pet: "Chase", petBreed: "Lab mix", species: "Dog", applied: "Apr 29, 2026", appliedAt: "2026-04-29", area: "San Roque", homeVisit: "passed", status: "completed", note: "Adoption completed and ID issued." },
   { id: "AD-503", applicant: "Paolo Cruz", email: "paolo.cruz@email.com", phone: "0920 118 4477", pet: "Ghost", petBreed: "Husky mix", species: "Dog", applied: "Apr 25, 2026", appliedAt: "2026-04-25", area: "San Roque", homeVisit: "pending", status: "rejected", note: "Unsecured gate; invited to reapply." },
-];
+] satisfies Omit<AdoptionApplication, "applicationId" | "ownerId" | "impoundId" | "applicationDate" | "applicationStatus" | "decisionDate">[];
 
 const ownerIds: Record<string, string> = {
   "Ana Reyes": "OW-206",

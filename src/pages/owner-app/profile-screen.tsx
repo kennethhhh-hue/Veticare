@@ -21,18 +21,21 @@ import { OcvasContactInfo } from "@/components/veticare/ocvas-contact-info";
 import { ProfilePhoto } from "@/components/veticare/profile-photo";
 import { signOut } from "@/integrations/supabase/auth-context";
 import type { OwnerProfile, OwnerRequest } from "@/lib/owner-preview-store";
+import { ownerRequestLabels } from "@/data/owner-app";
 
 export function ProfileScreen({
   profile,
   petCount,
   adoptionCount,
   requests,
+  requestsUnavailable,
   onSave,
 }: {
   profile: OwnerProfile;
   petCount: number;
   adoptionCount: number;
   requests: OwnerRequest[];
+  requestsUnavailable?: boolean;
   onSave: (profile: OwnerProfile) => Promise<boolean>;
 }) {
   const navigate = useNavigate();
@@ -135,6 +138,7 @@ export function ProfileScreen({
         </div>
       </section>
 
+      {requestsUnavailable ? <p role="alert" className="mt-4 px-5 text-[10.5px] text-destructive">Unable to load owner requests. Refresh to try again.</p> : null}
       {requests.length ? (
         <section className="mt-4 px-5">
           <div className="flex items-center justify-between">
@@ -144,8 +148,13 @@ export function ProfileScreen({
           <ul className="mt-2 divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
             {requests.map((request) => (
               <li key={request.id} className="flex items-start justify-between gap-2 p-3">
-                <span className="min-w-0"><span className="block text-[10.5px] font-bold text-foreground">{request.type === "visit" ? "Vet visit" : request.type === "pet-detail-change" ? "Pet detail change" : request.type === "annual-registration" ? "Annual registration" : "Free vaccination"} • {request.petName}</span><span className="mt-0.5 block truncate text-[9px] text-muted-foreground">{request.details}</span></span>
-                <span className="shrink-0 rounded-full bg-warning/12 px-2 py-1 text-[8px] font-bold text-warning">Submitted</span>
+                <span className="min-w-0">
+                  <span className="block text-[10.5px] font-bold text-foreground">{ownerRequestLabels[request.type]} • {request.petName}</span>
+                  {request.details ? <span className="mt-0.5 block break-words text-[9px] text-muted-foreground">{request.details}</span> : null}
+                </span>
+                <span className="shrink-0 rounded-full bg-secondary px-2 py-1 text-[8px] font-bold capitalize text-secondary-foreground">
+                  {request.localOnly ? "Saved on this device" : request.status}
+                </span>
               </li>
             ))}
           </ul>

@@ -10,6 +10,7 @@ import { PersonnelReviewQueue } from "@/components/dashboard/personnel-review-qu
 import { QuickActions } from "@/components/dashboard/quick-actions";
 import { ActivityFeed } from "@/components/dashboard/activity-feed";
 import { SummaryCards } from "@/components/dashboard/summary-cards";
+import { OwnerRequestQueue } from "@/components/dashboard/owner-request-queue";
 import { admin, kpis, type FeedItem, type Kpi, type RangeKey } from "@/data/veticare";
 import { PHILIPPINE_TIME_ZONE } from "@/lib/philippine-date";
 import { supabase } from "@/integrations/supabase/client";
@@ -198,6 +199,7 @@ const Dashboard = () => {
           <ActivityChart range={range} onRangeChange={setRange} />
           <VerificationQueue id="verification-queue" />
           <PersonnelReviewQueue />
+          <OwnerRequestQueue />
         </div>
 
         <div className="space-y-4 sm:space-y-5 xl:sticky xl:top-[88px]">

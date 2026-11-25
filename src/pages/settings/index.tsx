@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import {
   Bell,
@@ -17,6 +18,7 @@ import { AppShell } from "@/components/veticare/app-shell";
 import { PageHeader } from "@/components/admin/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
   Select,
@@ -27,9 +29,11 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/hooks/use-theme";
+import { supabase } from "@/integrations/supabase/client";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const SETTINGS_KEY = "veticare-admin-settings-preview";
+const shelterCapacityKey = ["shelter-kennel-capacity"] as const;
 
 function SettingCard({
   icon: Icon,
@@ -89,6 +93,36 @@ function SettingRow({
 
 const Settings = () => {
   const { theme, setTheme } = useTheme();
+  const queryClient = useQueryClient();
+  const [capacityDraft, setCapacityDraft] = useState<string | null>(null);
+  const capacity = useQuery({
+    queryKey: shelterCapacityKey,
+    queryFn: async () => {
+      const { data, error } = await supabase.from("shelter_settings").select("kennel_capacity").eq("id", true).single();
+      if (error) throw new Error(error.message);
+      return data.kennel_capacity;
+    },
+  });
+  const saveCapacity = useMutation({
+    mutationFn: async (next: number) => {
+      if (!Number.isInteger(next) || next <= 0 || next > 2147483647) throw new Error("Enter a positive whole number.");
+      const { data, error } = await supabase.from("shelter_settings")
+        .update({ kennel_capacity: next, updated_at: new Date().toISOString() }).eq("id", true)
+        .select("kennel_capacity").single();
+      if (error) throw new Error(error.message);
+      return data.kennel_capacity;
+    },
+    onSuccess: (next) => {
+      queryClient.setQueryData(shelterCapacityKey, next);
+      setCapacityDraft(null);
+      toast.success("Shelter capacity updated.");
+    },
+  });
+  const capacityValue = capacityDraft ?? (capacity.data != null ? String(capacity.data) : "");
+  const submitCapacity = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!saveCapacity.isPending && capacity.isSuccess) saveCapacity.mutate(Number(capacityValue));
+  };
   const [dirty, setDirty] = useState(false);
 
   const [require2fa, setRequire2fa] = useState(true);
@@ -184,6 +218,21 @@ const Settings = () => {
       />
 
       <div className="mt-5 grid gap-4 xl:grid-cols-2">
+        <SettingCard icon={Database} title="Shelter capacity" description="Set the total kennel slots shown on the dashboard.">
+          {capacity.isPending ? <p role="status" className="text-sm text-muted-foreground">Loading shelter capacity…</p> : capacity.isError ? (
+            <p role="alert" className="text-sm text-destructive">Shelter capacity is currently unavailable.</p>
+          ) : (
+            <form onSubmit={submitCapacity} className="space-y-2">
+              <Label htmlFor="kennel-capacity">Kennel slots</Label>
+              <div className="flex items-center gap-2">
+                <Input id="kennel-capacity" type="number" min={1} max={2147483647} step={1} required
+                  value={capacityValue} onChange={(event) => setCapacityDraft(event.target.value)} disabled={saveCapacity.isPending} />
+                <Button type="submit" disabled={saveCapacity.isPending || Number(capacityValue) === capacity.data}>Save capacity</Button>
+              </div>
+              {saveCapacity.error ? <p role="alert" className="text-sm text-destructive">{saveCapacity.error.message}</p> : null}
+            </form>
+          )}
+        </SettingCard>
         <SettingCard
           icon={Moon}
           title="Appearance"
@@ -500,7 +549,7 @@ const Settings = () => {
         <span className="rounded-full border border-border bg-card px-2 py-0.5 font-semibold">
           Preview dataset
         </span>
-        Settings are saved locally on this device; team sync is not enabled
+        Security, notification, and office preferences on this page are saved locally. Shelter capacity is shared across the admin dashboard.
       </p>
     </AppShell>
   );

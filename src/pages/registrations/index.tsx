@@ -24,6 +24,7 @@ import { MetricStrip } from "@/components/admin/metric-strip";
 import { FilterSelect } from "@/components/admin/filter-select";
 import { StatusPill } from "@/components/admin/status-pill";
 import { Pagination } from "@/components/admin/pagination";
+import { PetVaccinationRecords } from "@/components/admin/pet-vaccination-records";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -904,6 +905,7 @@ const Registrations = () => {
                     </div>
                     {detailTarget.qrCode ? <QRCodeSVG value={detailTarget.qrCode} size={88} level="M" marginSize={1} className="shrink-0 rounded bg-white p-1" title={`QR code for ${detailTarget.petId ?? detailTarget.name}`} /> : null}
                   </div>
+                  <PetVaccinationRecords key={detailTarget.id} petId={detailTarget.id} />
                 </>
               )}
               {editingDetails ? (

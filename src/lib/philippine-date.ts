@@ -1,5 +1,9 @@
 export const PHILIPPINE_TIME_ZONE = "Asia/Manila";
 
+export function formatCalendarDate(value: string): string {
+  return new Date(`${value}T00:00:00Z`).toLocaleDateString("en-PH", { dateStyle: "medium", timeZone: "UTC" });
+}
+
 export function getPhilippineDateKey(date = new Date()): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: PHILIPPINE_TIME_ZONE,

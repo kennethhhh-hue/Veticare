@@ -148,7 +148,7 @@ export function PetRecord({
               )}
             >
               <Syringe className="size-2.5" />
-              {vaccinationLabels[pet.vaccination]}
+              {pet.vaccination === "unknown" ? pet.lastVaccine : vaccinationLabels[pet.vaccination]}
             </p>
           </div>
           <div className="min-w-0">
@@ -212,7 +212,7 @@ export function PetRecord({
           )}
           <p className="text-[9.5px] leading-relaxed text-muted-foreground">
             {needsReview
-              ? `This pet needs attention: ${registrationLabels[pet.registration].toLowerCase()} registration and ${vaccinationLabels[pet.vaccination].toLowerCase()}. ${pet.vaccination !== "complete" ? `Last record: ${pet.lastVaccine}.` : ""}`
+              ? `This pet needs attention: ${registrationLabels[pet.registration].toLowerCase()} registration and ${pet.lastVaccinatedOn ? "vaccination validity needs review" : vaccinationLabels[pet.vaccination].toLowerCase()}. ${pet.lastVaccinatedOn && pet.vaccination !== "complete" ? `Last record: ${pet.lastVaccine}.` : ""}`
               : `Registration and vaccination are current. ${pet.lastVaccine}.`}
           </p>
         </div>

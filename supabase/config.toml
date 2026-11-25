@@ -2,3 +2,6 @@ project_id = "jveyhdkshnkjhjzwdnfc"
 
 [functions.admin-users]
 verify_jwt = true
+
+[functions.owner-notification-email]
+verify_jwt = false

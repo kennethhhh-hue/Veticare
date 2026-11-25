@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Bell, Heart, Home, PawPrint, User } from "lucide-react";
 import { toast } from "sonner";
@@ -12,14 +12,14 @@ import { PetIdScreen } from "@/pages/owner-app/pet-id-screen";
 import { PetRegistrationScreen } from "@/pages/owner-app/pet-registration-screen";
 import { NotificationsScreen, type OwnerNotification } from "@/pages/owner-app/notifications-screen";
 import type { AppTab } from "@/pages/owner-app/app-tab";
-import type { AdoptablePet, OwnerPet } from "@/data/owner-app";
+import type { AdoptablePet, OwnerPet, OwnerRequestInput } from "@/data/owner-app";
 import { useAuth } from "@/integrations/supabase/auth-context";
 import { supabase } from "@/integrations/supabase/client";
-import { getPhilippineDateKey } from "@/lib/philippine-date";
+import { formatCalendarDate, getPhilippineDateKey } from "@/lib/philippine-date";
+import type { Tables } from "@/integrations/supabase/types";
 import {
   readOwnerRequests,
   writeOwnerProfile,
-  writeOwnerRequests,
   type AdoptionRequest,
   type OwnerProfile,
   type OwnerRequest,
@@ -36,6 +36,19 @@ const tabs = [
 
 const isTab = (value: string | null): value is AppTab =>
   value === "home" || value === "pets" || value === "adopt" || value === "notifications" || value === "profile";
+
+function mapServiceRequest(row: Tables<"owner_service_requests">, petName: string): OwnerRequest {
+  return {
+    id: row.id,
+    type: row.request_type,
+    petId: row.pet_record_id,
+    petName,
+    submittedAt: row.created_at,
+    details: [row.preferred_date ? `Preferred date ${formatCalendarDate(row.preferred_date)}` : "", row.details]
+      .filter(Boolean).join(" · "),
+    status: row.status,
+  };
+}
 
 const OwnerApp = () => {
   const navigate = useNavigate();
@@ -62,10 +75,14 @@ const OwnerApp = () => {
     avatarUrl: String(session?.user.user_metadata.avatar_url ?? ""),
   }));
   const [adoptionRequests, setAdoptionRequests] = useState<AdoptionRequest[]>([]);
-  const [ownerRequests, setOwnerRequests] = useState<OwnerRequest[]>(readOwnerRequests);
+  const [ownerRequests, setOwnerRequests] = useState<OwnerRequest[]>([]);
+  const [ownerRequestsUnavailable, setOwnerRequestsUnavailable] = useState(false);
+  const [legacyRequests] = useState(readOwnerRequests);
+  const requestsVersion = useRef(0);
   const [registeringPet, setRegisteringPet] = useState(false);
 
   const loadOwnerRecords = useCallback(async () => {
+    const version = ++requestsVersion.current;
     setPetsLoading(true);
     const { data: userData, error: userError } = await supabase.auth.getUser();
     if (userError || !userData.user) {
@@ -74,11 +91,19 @@ const OwnerApp = () => {
       return;
     }
 
-    const [{ data: petRows, error: petsError }, { data: profileRow, error: profileError }, { data: notificationRows, error: notificationsError }] = await Promise.all([
+    const [{ data: petRows, error: petsError }, { data: profileRow, error: profileError }, { data: notificationRows, error: notificationsError }, vaccinationResult, requestResult] = await Promise.all([
       supabase.from("pets").select("*").eq("owner_id", userData.user.id).order("created_at", { ascending: false }),
       supabase.from("profiles").select("full_name, email, phone, address, barangay").eq("id", userData.user.id).maybeSingle(),
       supabase.from("notifications").select("*").eq("recipient_id", userData.user.id).order("created_at", { ascending: false }),
+      supabase.from("pet_vaccinations").select("pet_record_id, vaccine_name, administered_on").order("administered_on", { ascending: false }),
+      supabase.from("owner_service_requests").select("*, pets(name)").eq("owner_id", userData.user.id).order("created_at", { ascending: false }),
     ]);
+    if (version === requestsVersion.current) {
+      setOwnerRequestsUnavailable(Boolean(requestResult.error));
+      if (!requestResult.error) {
+        setOwnerRequests((requestResult.data ?? []).map((request) => mapServiceRequest(request, request.pets?.name ?? "Pet")));
+      }
+    }
 
     if (profileError) toast.error(profileError.message);
     if (notificationsError) toast.error(notificationsError.message);
@@ -99,6 +124,12 @@ const OwnerApp = () => {
       return;
     }
 
+    const vaccinesByPet = new Map<string, OwnerPet["vaccines"]>();
+    for (const vaccination of vaccinationResult.data ?? []) {
+      const vaccines = vaccinesByPet.get(vaccination.pet_record_id) ?? [];
+      vaccines.push({ name: vaccination.vaccine_name, date: formatCalendarDate(vaccination.administered_on), status: "done" });
+      vaccinesByPet.set(vaccination.pet_record_id, vaccines);
+    }
     setPets((petRows ?? []).map((pet) => ({
       id: pet.id,
       name: pet.name,
@@ -116,10 +147,34 @@ const OwnerApp = () => {
       registrationStatus: pet.status as "pending" | "approved" | "rejected",
       tags: [pet.status === "approved" ? "Registered" : pet.status === "rejected" ? "Needs update" : "Pending review"],
       nextDue: { title: "No reminders yet", date: "Available after registration", days: 0 },
-      vaccines: [],
+      vaccines: vaccinesByPet.get(pet.id) ?? [],
+      vaccinationsUnavailable: Boolean(vaccinationResult.error),
     })));
     setPetsLoading(false);
   }, []);
+
+  const submitOwnerRequest = async (request: OwnerRequestInput) => {
+    const { data, error } = await supabase.from("owner_service_requests")
+      .insert({
+        pet_record_id: request.petId,
+        request_type: request.type,
+        preferred_date: request.preferredDate || null,
+        details: request.details ?? "",
+      })
+      .select("*").single();
+    if (error) {
+      const message = error.code === "23505" ? "An identical request is already waiting for review."
+        : error.code === "PGRST205" ? "The owner request service is not available yet."
+        : error.message;
+      toast.error(message);
+      return false;
+    }
+    requestsVersion.current++;
+    setOwnerRequestsUnavailable(false);
+    const petName = pets.find((pet) => pet.id === request.petId)?.name ?? "Pet";
+    setOwnerRequests((current) => [mapServiceRequest(data, petName), ...current.filter((item) => item.id !== data.id)]);
+    return true;
+  };
 
   useEffect(() => {
     void loadOwnerRecords();
@@ -272,14 +327,10 @@ const OwnerApp = () => {
                 <PetIdScreen pet={idPet} ownerName={profile.fullName} onBack={() => setIdPet(null)} />
               ) : openPet ? (
                 <PetDetail
-                  pet={openPet}
+                  pet={pets.find((pet) => pet.id === openPet.id) ?? openPet}
                   onBack={() => setOpenPet(null)}
                   onShowId={(pet) => setIdPet(pet)}
-                  onRequest={(request) => setOwnerRequests((current) => {
-                    const updated = [request, ...current];
-                    writeOwnerRequests(updated);
-                    return updated;
-                  })}
+                  onRequest={submitOwnerRequest}
                 />
               ) : (
                 <>
@@ -336,7 +387,13 @@ const OwnerApp = () => {
                       profile={profile}
                       petCount={pets.length}
                       adoptionCount={adoptionRequests.length}
-                      requests={ownerRequests}
+                      requests={[
+                        ...ownerRequests,
+                        ...(Array.isArray(legacyRequests) ? legacyRequests : [])
+                          .filter((request) => pets.some((pet) => pet.id === request?.petId))
+                          .map((request) => ({ ...request, localOnly: true })),
+                      ]}
+                      requestsUnavailable={ownerRequestsUnavailable}
                       onSave={async (nextProfile) => {
                         const { data: userData, error: userError } = await supabase.auth.getUser();
                         if (userError || !userData.user) {

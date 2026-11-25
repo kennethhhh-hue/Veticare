@@ -251,7 +251,6 @@ export function AppShell({
       return;
     }
     let active = true;
-    let channel: ReturnType<typeof supabase.channel> | undefined;
     const loadHeaderData = async () => {
       const [{ data: profileRow, error: profileError }, { data: notificationRows, error: notificationsQueryError }] = await Promise.all([
         supabase.from("profiles").select("full_name, email, phone, address, barangay").eq("id", session.user.id).maybeSingle(),
@@ -273,7 +272,7 @@ export function AppShell({
       }
     };
     void loadHeaderData();
-    channel = supabase.channel(`header-notifications-${session.user.id}`)
+    const channel = supabase.channel(`header-notifications-${session.user.id}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications", filter: `recipient_id=eq.${session.user.id}` }, (payload) => {
         const row = payload.new as HeaderNotification;
         setNotifications((current) => current.some((item) => item.id === row.id) ? current : [row, ...current].slice(0, 10));
@@ -281,7 +280,7 @@ export function AppShell({
       .subscribe();
     return () => {
       active = false;
-      if (channel) void supabase.removeChannel(channel);
+      void supabase.removeChannel(channel);
     };
   }, [session?.user.id]);
 

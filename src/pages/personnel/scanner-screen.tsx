@@ -119,7 +119,7 @@ export function ScannerScreen({ pets, openFollowUps, onRecord, onRequestFollowUp
           ? "Registration is expired. Advise the owner to renew."
           : result === "unregistered"
             ? "No active registration was found for this QR."
-            : nextPet.vaccination === "unknown" ? "Vaccination record is not available." : "Vaccination or renewal needs review.",
+            : nextPet.vaccination === "unknown" && !nextPet.lastVaccinatedOn ? nextPet.lastVaccine : "Vaccination or renewal needs review.",
       });
     }
   };

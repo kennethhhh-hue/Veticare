@@ -15,6 +15,8 @@ const Login = () => {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [confirmPasswordError, setConfirmPasswordError] = useState<string | null>(null);
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
@@ -28,6 +30,7 @@ const Login = () => {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
+    setConfirmPasswordError(null);
     setSignupMessage(null);
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())) {
@@ -36,6 +39,10 @@ const Login = () => {
     }
     if (password.length < 6) {
       setError("Password must be at least 6 characters.");
+      return;
+    }
+    if (creatingAccount && password !== confirmPassword) {
+      setConfirmPasswordError(confirmPassword ? "Passwords do not match." : "Confirm your password.");
       return;
     }
     if (creatingAccount && (!fullName.trim() || !phone.trim() || !address.trim() || !barangay.trim())) {
@@ -74,6 +81,7 @@ const Login = () => {
       setSubmitting(false);
       setCreatingAccount(false);
       setPassword("");
+      setConfirmPassword("");
       setSignupMessage(data.session
         ? "Your account was created. Sign in to check its approval status."
         : "Check your email to confirm your account, then sign in. Admin approval is still required.");
@@ -170,7 +178,10 @@ const Login = () => {
                   type={showPassword ? "text" : "password"}
                   autoComplete={creatingAccount ? "new-password" : "current-password"}
                   value={password}
-                  onChange={(event) => setPassword(event.target.value)}
+                  onChange={(event) => {
+                    setPassword(event.target.value);
+                    setConfirmPasswordError(null);
+                  }}
                   placeholder="Enter your password"
                   className="h-11 bg-background pl-9 pr-10"
                   aria-invalid={Boolean(error)}
@@ -185,6 +196,33 @@ const Login = () => {
                 </button>
               </div>
             </div>
+
+            {creatingAccount ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="login-confirm-password">Confirm password</Label>
+                <div className="relative">
+                  <Lock className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/70" />
+                  <Input
+                    id="login-confirm-password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    value={confirmPassword}
+                    onChange={(event) => {
+                      setConfirmPassword(event.target.value);
+                      setConfirmPasswordError(null);
+                    }}
+                    placeholder="Re-enter your password"
+                    className="h-11 bg-background pl-9"
+                    required
+                    aria-invalid={Boolean(confirmPasswordError)}
+                    aria-describedby={confirmPasswordError ? "login-confirm-password-error" : undefined}
+                  />
+                </div>
+                {confirmPasswordError ? (
+                  <p id="login-confirm-password-error" className="text-[12px] text-destructive" role="alert">{confirmPasswordError}</p>
+                ) : null}
+              </div>
+            ) : null}
 
             {signupMessage ? <p className="rounded-lg bg-primary-soft p-3 text-[12px] text-foreground" role="status">{signupMessage}</p> : null}
             {error ? <p className="text-[12px] text-destructive" role="alert">{error}</p> : null}
@@ -205,6 +243,8 @@ const Login = () => {
               type="button"
               onClick={() => {
                 setCreatingAccount((current) => !current);
+                setConfirmPassword("");
+                setConfirmPasswordError(null);
                 setError(null);
                 setSignupMessage(null);
               }}

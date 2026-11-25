@@ -1,3 +1,17 @@
+export const ownerRequestLabels = {
+  visit: "Vet visit",
+  "pet-detail-change": "Pet detail change",
+  "annual-registration": "Annual registration",
+  "free-vaccination": "Free vaccination",
+} as const;
+
+export interface OwnerRequestInput {
+  type: keyof typeof ownerRequestLabels;
+  petId: string;
+  details?: string;
+  preferredDate?: string;
+}
+
 export interface OwnerPet {
   id: string;
   name: string;
@@ -20,6 +34,7 @@ export interface OwnerPet {
   tags: string[];
   nextDue: { title: string; date: string; days: number };
   vaccines: { name: string; date: string; status: "done" | "due" }[];
+  vaccinationsUnavailable?: boolean;
 }
 
 export interface AdoptablePet {

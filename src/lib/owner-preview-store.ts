@@ -1,4 +1,4 @@
-import { owner, ownerPets, type OwnerPet } from "@/data/owner-app";
+import { owner, ownerPets, type OwnerPet, type OwnerRequestInput } from "@/data/owner-app";
 
 const PETS_KEY = "veticare-owner-preview-pets";
 const PROFILE_KEY = "veticare-owner-preview-profile";
@@ -25,12 +25,13 @@ export interface AdoptionRequest {
 
 export interface OwnerRequest {
   id: string;
-  type: "visit" | "pet-detail-change" | "annual-registration" | "free-vaccination";
+  type: OwnerRequestInput["type"];
   petId: string;
   petName: string;
   submittedAt: string;
   details: string;
-  status: "submitted";
+  status: "submitted" | "completed" | "declined";
+  localOnly?: boolean;
 }
 
 function readJson<T>(key: string, fallback: T): T {
@@ -49,7 +50,7 @@ export const readOwnerProfile = () => readJson<OwnerProfile>(PROFILE_KEY, {
   email: owner.email,
   phone: owner.phone,
   address: owner.address,
-  barangay: owner.address.split(",").at(-1)?.trim() ?? "",
+  barangay: owner.address.split(",").pop()?.trim() ?? "",
 });
 export const writeOwnerProfile = (profile: OwnerProfile) => localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
 export const readAdoptionRequests = () => readJson<AdoptionRequest[]>(REQUESTS_KEY, []);
@@ -57,9 +58,3 @@ export const writeAdoptionRequests = (requests: AdoptionRequest[]) => localStora
 export const readEventReservations = () => readJson<string[]>(EVENTS_KEY, []);
 export const writeEventReservations = (reservations: string[]) => localStorage.setItem(EVENTS_KEY, JSON.stringify(reservations));
 export const readOwnerRequests = () => readJson<OwnerRequest[]>(OWNER_REQUESTS_KEY, []);
-export const writeOwnerRequests = (requests: OwnerRequest[]) => localStorage.setItem(OWNER_REQUESTS_KEY, JSON.stringify(requests));
-export function addOwnerRequest(request: OwnerRequest) {
-  const updated = [request, ...readOwnerRequests()];
-  writeOwnerRequests(updated);
-  return updated;
-}

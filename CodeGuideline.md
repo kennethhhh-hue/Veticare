@@ -66,6 +66,7 @@ Whenever a new module (such as a component, hook, or utility) or a new page is a
 - **src/pages/owner-app/**: Pet owner mobile app route (`/app`, tabs via `?tab=`). Screens for home, pets, pet detail, digital pet ID, adoption browsing and profile, mounted inside a phone frame on desktop.
 - **src/components/owner-app/**: Owner app pieces — `pet-photo.tsx` (photo with placeholder fallback) and `pet-id-card.tsx` (digital ID card with sample code pattern).
 - **src/data/owner-app.ts**: Sample owner, pets, vaccination records, adoptable pets and events for the mobile app.
+- **supabase/functions/owner-notification-email/**: Sends queued impound and expired registration emails to pet owners. Supabase Cron calls it with a dedicated worker key.
 
 ## How to Add New Code
 
