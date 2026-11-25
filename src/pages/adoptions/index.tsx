@@ -21,6 +21,7 @@ import { PageHeader } from "@/components/admin/page-header";
 import { MetricStrip } from "@/components/admin/metric-strip";
 import { FilterSelect } from "@/components/admin/filter-select";
 import { StatusPill } from "@/components/admin/status-pill";
+import { PetPhoto } from "@/components/owner-app/pet-photo";
 import { Pagination } from "@/components/admin/pagination";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -62,6 +63,28 @@ interface AnimalOption {
   name: string;
   breed: string;
   species: "Dog" | "Cat";
+  age: string;
+  sex: string;
+  color: string;
+  photoUrl?: string;
+}
+
+type RegistryApplication = AdoptionApplication & { animal: AnimalOption | null };
+
+function AnimalPreview({ animal }: { animal: AnimalOption }) {
+  return (
+    <section className="space-y-2 rounded-xl border border-border bg-card p-3">
+      <h3 className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Animal preview</h3>
+      <div className="flex items-start gap-3">
+        <PetPhoto src={animal.photoUrl} alt={animal.name} species={animal.species} className="size-20 shrink-0 rounded-lg" />
+        <div className="min-w-0">
+          <p className="break-words text-sm font-bold">{animal.name}</p>
+          <p className="text-xs text-muted-foreground">{[animal.species, animal.breed, animal.sex, animal.age, animal.color].filter(Boolean).join(" · ")}</p>
+          <p className="mt-1 break-all text-[10px] font-semibold text-muted-foreground">{animal.impoundId}</p>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 const PAGE_SIZE = 5;
@@ -81,7 +104,7 @@ const initials = (name: string) =>
 
 const Adoptions = () => {
   const queryClient = useQueryClient();
-  const [rows, setRows] = useState<AdoptionApplication[]>([]);
+  const [rows, setRows] = useState<RegistryApplication[]>([]);
   const [applicants, setApplicants] = useState<ApplicantOption[]>([]);
   const [availableAnimals, setAvailableAnimals] = useState<AnimalOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -94,7 +117,7 @@ const Adoptions = () => {
   const [readyToDecide, setReadyToDecide] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
-  const [selected, setSelected] = useState<AdoptionApplication | null>(null);
+  const [selected, setSelected] = useState<RegistryApplication | null>(null);
   const [newApplicationOpen, setNewApplicationOpen] = useState(false);
   const [applicantId, setApplicantId] = useState("");
   const [animalId, setAnimalId] = useState("");
@@ -103,10 +126,11 @@ const Adoptions = () => {
   const loadAdoptions = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
-    const [applicationsResult, profilesResult, impoundsResult] = await Promise.all([
+    const [applicationsResult, profilesResult, impoundsResult, petPhotosResult] = await Promise.all([
       supabase.from("adoption_applications").select("*").order("created_at", { ascending: false }),
       supabase.from("profiles").select("id, full_name, email, phone, barangay, account_deleted_at").eq("role", "owner").order("full_name"),
-      supabase.from("impounds").select("id, impound_id, name, breed, animal_type, adoption_status, impound_status"),
+      supabase.from("impounds").select("id, impound_id, pet_id, name, breed, animal_type, age, sex, color, photo_url, adoption_status, impound_status"),
+      supabase.from("pets").select("pet_id, photo_url").not("pet_id", "is", null).not("photo_url", "is", null),
     ]);
     const error = applicationsResult.error ?? profilesResult.error ?? impoundsResult.error;
     if (error) {
@@ -117,6 +141,18 @@ const Adoptions = () => {
 
     const profileById = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile]));
     const impoundById = new Map((impoundsResult.data ?? []).map((animal) => [animal.id, animal]));
+    const photoByPetId = new Map((petPhotosResult.data ?? []).map((pet) => [pet.pet_id, pet.photo_url]));
+    const toAnimalOption = (animal: NonNullable<typeof impoundsResult.data>[number]): AnimalOption => ({
+      id: animal.id,
+      impoundId: animal.impound_id,
+      name: animal.name,
+      breed: animal.breed,
+      species: animal.animal_type as "Dog" | "Cat",
+      age: animal.age,
+      sex: animal.sex,
+      color: animal.color,
+      photoUrl: animal.photo_url || photoByPetId.get(animal.pet_id) || undefined,
+    });
     setApplicants((profilesResult.data ?? []).filter((profile) => !profile.account_deleted_at).map((profile) => ({
       id: profile.id,
       name: profile.full_name || profile.email || "Pet owner",
@@ -126,19 +162,14 @@ const Adoptions = () => {
     })));
     setAvailableAnimals((impoundsResult.data ?? [])
       .filter((animal) => animal.adoption_status === "available" && animal.impound_status === "impounded")
-      .map((animal) => ({
-        id: animal.id,
-        impoundId: animal.impound_id,
-        name: animal.name,
-        breed: animal.breed,
-        species: animal.animal_type as "Dog" | "Cat",
-      })));
+      .map(toAnimalOption));
     setRows((applicationsResult.data ?? []).map((application) => {
       const applicant = profileById.get(application.applicant_id);
       const animal = impoundById.get(application.impound_record_id);
       const displayDate = new Date(`${application.application_date}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
       return {
         id: application.id,
+        animal: animal ? toAnimalOption(animal) : null,
         applicationId: application.application_id,
         ownerId: application.applicant_id,
         impoundId: animal?.impound_id ?? "Unknown impound",
@@ -161,6 +192,8 @@ const Adoptions = () => {
     }));
     setLoading(false);
   }, []);
+
+  const selectedAnimal = availableAnimals.find((animal) => animal.id === animalId);
 
   useEffect(() => {
     void loadAdoptions();
@@ -205,7 +238,7 @@ const Adoptions = () => {
     setReadyToDecide(false);
     setPage(1);
     void loadAdoptions();
-    toast.success("Adoption queue refreshed from Supabase.");
+    toast.success("Adoption queue refreshed.");
   };
 
   const decide = async (application: AdoptionApplication, next: AdoptionStatus) => {
@@ -597,9 +630,6 @@ const Adoptions = () => {
       </section>
 
       <p className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10.5px] text-muted-foreground/80">
-        <span className="rounded-full border border-border bg-card px-2 py-0.5 font-semibold">
-          Supabase registry
-        </span>
         {rows.filter((row) => row.status === "pending" && row.homeVisit === "passed").length}{" "}
         {rows.filter((row) => row.status === "pending" && row.homeVisit === "passed").length === 1
           ? "application is"
@@ -631,15 +661,14 @@ const Adoptions = () => {
                 <div className="flex flex-wrap items-center gap-2">
                   <StatusPill status={selected.status} />
                   <StatusPill status={selected.homeVisit === "passed" ? "completed" : selected.homeVisit} />
-                  <span className="rounded-full bg-secondary px-2 py-1 text-[10px] font-semibold text-secondary-foreground">
-                    {selected.pet} • {selected.petBreed}
-                  </span>
                 </div>
 
+                {selected.animal ? <AnimalPreview animal={selected.animal} /> : null}
+
                 <div className="divide-y divide-border rounded-2xl border border-border bg-card">
+                  <h3 className="px-3.5 py-2 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Owner and application details</h3>
                   {[
                     { label: "Owner ID", value: selected.ownerId, icon: Eye },
-                    { label: "Impound ID", value: selected.impoundId, icon: PawPrint },
                     { label: "Application date", value: selected.applicationDate, icon: Clock },
                     { label: "Decision date", value: selected.decisionDate ?? "Not decided", icon: Clock },
                     { label: "Application status", value: selected.applicationStatus, icon: Heart },
@@ -728,15 +757,15 @@ const Adoptions = () => {
         <DialogContent className="max-h-[90vh] overflow-y-auto rounded-xl border-border bg-card sm:max-w-[520px]">
           <DialogHeader>
             <DialogTitle>New adoption application</DialogTitle>
-            <DialogDescription>Create an application for an owner and an available animal from the Supabase shelter register.</DialogDescription>
+            <DialogDescription>Create an application for an owner and an available animal from the shelter register.</DialogDescription>
           </DialogHeader>
             {applicants.length === 0 || availableAnimals.length === 0 ? (
               <p className="rounded-lg border border-warning/25 bg-warning/10 p-3 text-[10px] leading-relaxed text-foreground">
                 {applicants.length === 0 && availableAnimals.length === 0
                   ? "No owner accounts or available impound records were found. Add an owner and ensure an animal is marked available in the Impounded Animals page first."
                   : applicants.length === 0
-                    ? "No owner accounts were found. Register or approve an owner account before creating an adoption application."
-                    : "No available impound animals were found. An animal must be in the Supabase shelter register and marked available before an application can be created."}
+                    ? "No owner accounts were found. Register an owner account before creating an adoption application."
+                    : "No available impound animals were found. An animal must be in the shelter register and marked available before an application can be created."}
               </p>
             ) : null}
           <form onSubmit={createApplication} className="space-y-3">
@@ -758,6 +787,7 @@ const Adoptions = () => {
               <Label htmlFor="adoption-note">Application note</Label>
               <Input id="adoption-note" value={applicantNote} onChange={(event) => setApplicantNote(event.target.value)} placeholder="Home, experience, or follow-up notes" />
             </div>
+            {selectedAnimal ? <AnimalPreview animal={selectedAnimal} /> : null}
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setNewApplicationOpen(false)}>Cancel</Button>
               <Button type="submit" disabled={savingApplication || applicants.length === 0 || availableAnimals.length === 0}><HeartHandshake className="size-4" />{savingApplication ? "Saving…" : "Create application"}</Button>

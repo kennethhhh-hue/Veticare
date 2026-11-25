@@ -23,6 +23,7 @@ export interface OwnerPet {
   color: string;
   petId: string;
   qrCode?: string | null;
+  validThrough?: string | null;
   ownerName?: string;
   ownerEmail?: string;
   ownerPhone?: string;
@@ -48,6 +49,7 @@ export interface AdoptablePet {
   tags: string[];
   story?: string;
   photoUrl?: string;
+  vaccineName?: string;
 }
 
 export const owner = {

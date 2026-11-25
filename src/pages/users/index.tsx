@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { FunctionsHttpError } from "@supabase/supabase-js";
 import {
   MailPlus,
-  Pencil,
   RefreshCw,
   Search,
   ShieldCheck,
-  Trash2,
   UserCheck,
   UserPlus,
   Users,
@@ -21,16 +20,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -45,11 +34,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -103,11 +87,7 @@ const UsersRoles = () => {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<TeamRole>("Personnel");
   const [inviteError, setInviteError] = useState<string | null>(null);
-  const [editing, setEditing] = useState<TeamMember | null>(null);
-  const [editRole, setEditRole] = useState<TeamRole>("Personnel");
-  const [editStatus, setEditStatus] = useState<TeamStatus>("active");
 
-  const [removing, setRemoving] = useState<TeamMember | null>(null);
 
   const loadUsers = async () => {
     setLoading(true);
@@ -183,6 +163,7 @@ const UsersRoles = () => {
 
   const sendInvite = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (busy) return;
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(inviteEmail.trim())) {
       setInviteError("Enter a valid staff email address.");
       return;
@@ -190,11 +171,12 @@ const UsersRoles = () => {
     const normalizedEmail = inviteEmail.trim().toLowerCase();
     setBusy(true);
     const { data, error } = await supabase.functions.invoke("admin-users", {
-      body: { action: "invite", email: normalizedEmail, fullName: inviteName.trim(), role: roleToDatabase[inviteRole] },
+      body: { action: "invite-via-gmail", email: normalizedEmail, fullName: inviteName.trim(), role: roleToDatabase[inviteRole] },
     });
     setBusy(false);
     if (error || data?.error) {
-      setInviteError(error?.message || String(data?.error));
+      const details = error instanceof FunctionsHttpError ? await error.context.json().catch(() => null) : null;
+      setInviteError(typeof details?.error === "string" ? details.error : error?.message || String(data?.error));
       return;
     }
     setInviteError(null);
@@ -203,44 +185,6 @@ const UsersRoles = () => {
     setInviteEmail("");
     setInviteName("");
     setInviteRole("Personnel");
-    await loadUsers();
-  };
-
-  const openEdit = (member: TeamMember) => {
-    setEditing(member);
-    setEditRole(member.role);
-    setEditStatus(member.status === "inactive" ? "inactive" : "active");
-  };
-
-  const saveMember = async () => {
-    if (!editing) return;
-    setBusy(true);
-    const { data, error } = await supabase.functions.invoke("admin-users", {
-      body: { action: "update", userId: editing.id, role: roleToDatabase[editRole], isActive: editStatus !== "inactive" },
-    });
-    setBusy(false);
-    if (error || data?.error) {
-      toast.error("Unable to update user", { description: error?.message || String(data?.error) });
-      return;
-    }
-    toast.success(`${editing.name} updated`);
-    setEditing(null);
-    await loadUsers();
-  };
-
-  const removeMember = async () => {
-    if (!removing) return;
-    setBusy(true);
-    const { data, error } = await supabase.functions.invoke("admin-users", {
-      body: { action: "remove", userId: removing.id },
-    });
-    setBusy(false);
-    if (error || data?.error) {
-      toast.error("Unable to remove user", { description: error?.message || String(data?.error) });
-      return;
-    }
-    toast.success(`${removing.name} access revoked`, { description: "Their account and records were preserved." });
-    setRemoving(null);
     await loadUsers();
   };
 
@@ -350,8 +294,8 @@ const UsersRoles = () => {
           </div>
         </div>
 
-        <div className="hidden border-y border-border bg-secondary/40 px-5 py-2 xl:grid xl:grid-cols-[minmax(0,1.5fr)_120px_92px_minmax(0,1fr)_96px_76px] xl:gap-4">
-          {["Team member", "Role", "Status", "Last active", "Joined", "Action"].map((label) => (
+        <div className="hidden border-y border-border bg-secondary/40 px-5 py-2 xl:grid xl:grid-cols-[minmax(0,1.5fr)_120px_92px_minmax(0,1fr)_96px] xl:gap-4">
+          {["Team member", "Role", "Status", "Last active", "Joined"].map((label) => (
             <p
               key={label}
               className="text-[9px] font-bold uppercase tracking-[0.12em] text-muted-foreground"
@@ -394,7 +338,7 @@ const UsersRoles = () => {
             {visible.map((member) => (
               <li
                 key={member.id}
-                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2.5 px-3.5 py-3.5 transition-colors hover:bg-secondary/30 sm:px-4 xl:grid-cols-[minmax(0,1.5fr)_120px_92px_minmax(0,1fr)_96px_76px] xl:gap-4 xl:px-5"
+                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2.5 px-3.5 py-3.5 transition-colors hover:bg-secondary/30 sm:px-4 xl:grid-cols-[minmax(0,1.5fr)_120px_92px_minmax(0,1fr)_96px] xl:gap-4 xl:px-5"
               >
                 <div className="order-1 flex min-w-0 items-center gap-2.5 xl:order-none">
                   <span className="grid size-9 shrink-0 place-items-center rounded-full bg-primary-soft text-[11px] font-bold text-primary">
@@ -443,36 +387,6 @@ const UsersRoles = () => {
                   <p className="text-[10.5px] text-foreground/85">{member.joined}</p>
                 </div>
 
-                <div className="order-4 col-span-2 flex items-center justify-end gap-1 xl:order-none xl:col-span-1 xl:justify-start">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        size="icon"
-                        variant="outline"
-                        onClick={() => openEdit(member)}
-                        className="size-7 rounded-lg border-border text-muted-foreground hover:border-primary/30 hover:text-primary"
-                        aria-label={`Edit ${member.name}`}
-                      >
-                        <Pencil className="size-3.5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Edit role & status</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        size="icon"
-                        variant="outline"
-                        onClick={() => setRemoving(member)}
-                        className="size-7 rounded-lg border-border text-muted-foreground hover:border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
-                        aria-label={`Remove ${member.name}`}
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Remove access</TooltipContent>
-                  </Tooltip>
-                </div>
               </li>
             ))}
           </ul>
@@ -487,13 +401,6 @@ const UsersRoles = () => {
           onPageChange={setPage}
         />
       </section>
-
-      <p className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10.5px] text-muted-foreground/80">
-        <span className="rounded-full border border-border bg-card px-2 py-0.5 font-semibold">
-          Live Supabase accounts
-        </span>
-        Email invitations depend on the project's Auth email configuration
-      </p>
 
       <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
         <DialogContent className="rounded-2xl border-border sm:max-w-[440px]">
@@ -553,7 +460,7 @@ const UsersRoles = () => {
             </div>
             <div className="rounded-xl border border-info/20 bg-info/5 p-2.5">
               <p className="text-[10px] leading-relaxed text-muted-foreground">
-                Supabase Auth sends the invitation email using the project's configured email provider.
+                The invitee will receive a Gmail invitation with a link to set their password.
               </p>
             </div>
             <DialogFooter className="gap-2 sm:gap-0">
@@ -574,121 +481,6 @@ const UsersRoles = () => {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(editing)} onOpenChange={(open) => (!open ? setEditing(null) : null)}>
-        <DialogContent className="max-h-[88vh] w-[calc(100%-2rem)] max-w-[480px] overflow-y-auto rounded-2xl border-border p-5 sm:rounded-2xl">
-          {editing ? (
-            <>
-              <DialogHeader className="pr-6 text-left">
-                <div className="flex items-center gap-3">
-                  <span className="grid size-11 shrink-0 place-items-center rounded-full bg-primary-soft text-[12px] font-bold text-primary">
-                    {initials(editing.name)}
-                  </span>
-                  <div className="min-w-0">
-                    <DialogTitle className="truncate text-[16px] font-extrabold tracking-[-0.02em]">
-                      {editing.name}
-                    </DialogTitle>
-                    <DialogDescription className="truncate text-[11px]">
-                      {editing.email}
-                    </DialogDescription>
-                  </div>
-                </div>
-              </DialogHeader>
-
-              <div className="space-y-3.5">
-                <div className="space-y-1.5">
-                  <p className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-                    Role
-                  </p>
-                  <Select value={editRole} onValueChange={(value) => setEditRole(value as TeamRole)}>
-                    <SelectTrigger className="h-10 rounded-xl border-border text-[12px] font-semibold">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="rounded-xl border-border">
-                      {teamRoles.map((item) => (
-                        <SelectItem key={item} value={item} className="text-[12px]">
-                          {item}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <p className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-                    Access status
-                  </p>
-                  <Select
-                    value={editStatus}
-                    onValueChange={(value) => setEditStatus(value as TeamStatus)}
-                  >
-                    <SelectTrigger className="h-10 rounded-xl border-border text-[12px] font-semibold">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="rounded-xl border-border">
-                      <SelectItem value="active" className="text-[12px]">
-                        Active
-                      </SelectItem>
-                      <SelectItem value="inactive" className="text-[12px]">
-                        Inactive
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="rounded-xl border border-border bg-secondary/40 p-3">
-                  <p className="text-[10px] leading-relaxed text-muted-foreground">
-                    Admins manage the console. Personnel handle City Pound workflows. Owners use
-                    the pet-owner app; their approval status is managed separately.
-                  </p>
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  <Button
-                    onClick={saveMember}
-                    disabled={busy}
-                    className="h-10 w-full rounded-xl text-[12px] font-bold shadow-glow"
-                  >
-                    {busy ? "Saving..." : "Save changes"}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => setEditing(null)}
-                    className="h-10 w-full rounded-xl border-border text-[12px] font-semibold"
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            </>
-          ) : null}
-        </DialogContent>
-      </Dialog>
-
-      <AlertDialog open={Boolean(removing)} onOpenChange={(open) => (!open ? setRemoving(null) : null)}>
-        <AlertDialogContent className="rounded-2xl border-border sm:max-w-[420px]">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-[16px] font-extrabold tracking-[-0.02em]">
-                  Revoke access for {removing?.name}?
-            </AlertDialogTitle>
-            <AlertDialogDescription className="text-[11.5px] leading-relaxed">
-              Their sign-in will be blocked and their account disabled. Existing registry records
-              will be preserved.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="gap-2 sm:gap-0">
-            <AlertDialogCancel className="h-9 rounded-xl text-[12px] font-semibold">
-              Keep access
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={removeMember}
-              disabled={busy}
-              className="h-9 rounded-xl bg-destructive text-[12px] font-bold text-destructive-foreground hover:bg-destructive/90"
-            >
-              {busy ? "Revoking..." : "Remove member"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </AppShell>
   );
 };

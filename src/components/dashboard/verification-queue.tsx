@@ -294,7 +294,7 @@ export function VerificationQueue({ id }: VerificationQueueProps) {
           {waitingOver48Hours} {waitingOver48Hours === 1 ? "record is" : "records are"} past the 48-hour target
         </p>
         <p className="text-[10.5px] font-medium text-muted-foreground/80">
-          Changes sync with the Supabase pet registry
+          Changes sync with the pet registry
         </p>
       </footer>
     </section>

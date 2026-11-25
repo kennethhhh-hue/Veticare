@@ -3,7 +3,6 @@ import { FunctionsFetchError, FunctionsHttpError } from "@supabase/supabase-js";
 import { useNavigate } from "react-router-dom";
 import {
   CalendarDays,
-  Check,
   KeyRound,
   Mail,
   MapPin,
@@ -18,7 +17,6 @@ import {
   Trash2,
   UserCheck,
   Users,
-  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/veticare/app-shell";
@@ -114,8 +112,7 @@ const Owners = () => {
   const accountMenuRef = useRef<HTMLButtonElement>(null);
   const ownerLoadVersion = useRef(0);
   const [editing, setEditing] = useState(false);
-  const [updatingOwnerId, setUpdatingOwnerId] = useState<string | null>(null);
-  const [draft, setDraft] = useState({ name: "", phone: "", address: "", barangay: "", status: "pending" as "pending" | "approved" | "rejected" });
+  const [draft, setDraft] = useState({ name: "", phone: "", address: "", barangay: "" });
 
   const loadOwners = useCallback(async () => {
     const version = ++ownerLoadVersion.current;
@@ -231,7 +228,7 @@ const Owners = () => {
           .includes(search);
       const matchesBarangay = barangay === "all" || owner.barangay === barangay;
       const matchesStatus = status === "all" || owner.status === status;
-      const matchesAttention = !needsAttention || owner.status === "inactive" || owner.status === "pending" || owner.status === "rejected";
+      const matchesAttention = !needsAttention || owner.status === "inactive" || owner.status === "rejected";
       const matchesPets = !multiPet || owner.pets > 1;
       return matchesQuery && matchesBarangay && matchesStatus && matchesAttention && matchesPets;
     });
@@ -247,31 +244,6 @@ const Owners = () => {
     setPage(1);
   };
 
-  const updateOwnerStatus = async (owner: OwnerRecord, next: "approved" | "rejected") => {
-    if (updatingOwnerId) return;
-    setUpdatingOwnerId(owner.id);
-    const { data, error } = await supabase.from("profiles")
-      .update({ approval_status: next })
-      .eq("id", owner.id)
-      .eq("role", "owner")
-      .eq("approval_status", "pending")
-      .select("id")
-      .maybeSingle();
-    setUpdatingOwnerId(null);
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
-    if (!data) {
-      toast.error("Owner could not be updated. Refresh the list and check the approval status.");
-      return;
-    }
-    const statusValue = next === "approved" ? "active" : "rejected";
-    setOwnerRows((current) => current.map((item) => item.id === owner.id ? { ...item, status: statusValue } : item));
-    setSelected((current) => current?.id === owner.id ? { ...current, status: statusValue } : current);
-    toast.success(next === "approved" ? `${owner.name} approved.` : `${owner.name} rejected.`);
-  };
-
   const saveOwnerDraft = async () => {
     if (!selected) return;
     if (!draft.barangay.trim()) {
@@ -284,7 +256,6 @@ const Owners = () => {
         phone: draft.phone.trim(),
         address: draft.address.trim(),
         barangay: draft.barangay.trim(),
-        approval_status: draft.status,
       })
       .eq("id", selected.id)
       .eq("role", "owner");
@@ -298,7 +269,6 @@ const Owners = () => {
       phone: draft.phone.trim(),
       address: draft.address.trim(),
       barangay: draft.barangay.trim(),
-      status: draft.status === "approved" ? "active" as const : draft.status,
     };
     setOwnerRows((current) => current.map((item) => item.id === selected.id ? updated : item));
     setSelected(updated);
@@ -396,19 +366,6 @@ const Owners = () => {
         eyebrow="Operations"
         title="Owners"
         description="Manage pet owner records, keep contact details current and see every household linked to the registry."
-        actions={
-          <Button
-            variant={status === "pending" ? "default" : "outline"}
-            onClick={() => {
-              setStatus((current) => current === "pending" ? "all" : "pending");
-              setPage(1);
-            }}
-            className="h-9 rounded-xl px-3.5 text-[12px] font-bold"
-          >
-            <UserCheck className="size-4" />
-            Review pending ({ownerRows.filter((owner) => owner.status === "pending").length})
-          </Button>
-        }
       />
 
       <MetricStrip metrics={metrics} />
@@ -446,7 +403,6 @@ const Owners = () => {
                 { value: "all", label: "All" },
                 { value: "active", label: "Active" },
                 { value: "inactive", label: "Inactive" },
-                { value: "pending", label: "Pending review" },
                 { value: "rejected", label: "Rejected" },
               ]}
             />
@@ -542,7 +498,7 @@ const Owners = () => {
               {loading ? "Loading owners…" : loadError ? "Owner profiles unavailable" : "No owners match"}
             </p>
             <p className="max-w-[260px] text-[11.5px] text-muted-foreground">
-              {loadError ?? (loading ? "Loading verified owner accounts from Supabase." : "Try another barangay or clear the filters to see every household.")}
+              {loadError ?? (loading ? "Loading owner accounts." : "Try another barangay or clear the filters to see every household.")}
             </p>
             <Button
               variant="outline"
@@ -615,39 +571,6 @@ const Owners = () => {
                 </div>
 
                 <div onClick={(event) => event.stopPropagation()} className="order-4 col-span-2 flex items-center justify-end gap-1 xl:order-none xl:col-span-1 xl:justify-start">
-                  {owner.status === "pending" ? (
-                    <>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            size="icon"
-                            disabled={Boolean(updatingOwnerId)}
-                            onClick={() => updateOwnerStatus(owner, "approved")}
-                            className="size-7 rounded-lg bg-success text-success-foreground"
-                            aria-label={`Approve ${owner.name}`}
-                          >
-                            <Check className="size-3.5" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Approve owner</TooltipContent>
-                      </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            size="icon"
-                            variant="outline"
-                            disabled={Boolean(updatingOwnerId)}
-                            onClick={() => updateOwnerStatus(owner, "rejected")}
-                            className="size-7 rounded-lg border-border text-destructive"
-                            aria-label={`Reject ${owner.name}`}
-                          >
-                            <X className="size-3.5" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Reject owner</TooltipContent>
-                      </Tooltip>
-                    </>
-                  ) : null}
                   {owner.status === "active" ? (
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -672,7 +595,7 @@ const Owners = () => {
                         variant="outline"
                         onClick={() => {
                           setSelected(owner);
-                          setDraft({ name: owner.name, phone: owner.phone, address: owner.address, barangay: owner.barangay, status: owner.status === "active" ? "approved" : owner.status === "rejected" ? "rejected" : "pending" });
+                          setDraft({ name: owner.name, phone: owner.phone, address: owner.address, barangay: owner.barangay });
                           setEditing(true);
                         }}
                         className="size-7 rounded-lg border-border text-muted-foreground hover:border-primary/30 hover:text-primary"
@@ -698,14 +621,6 @@ const Owners = () => {
           onPageChange={setPage}
         />
       </section>
-
-      <p className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10.5px] text-muted-foreground/80">
-        <span className="rounded-full border border-border bg-card px-2 py-0.5 font-semibold">
-          Preview dataset
-        </span>
-        {ownerRows.filter((owner) => owner.status === "inactive" || owner.status === "pending" || owner.status === "rejected").length} owners need review •
-        changes reset when you refresh
-      </p>
 
       <Dialog
         open={Boolean(selected)}
@@ -817,14 +732,6 @@ const Owners = () => {
                       <Label htmlFor="edit-owner-barangay">Barangay</Label>
                       <BarangaySelect id="edit-owner-barangay" value={draft.barangay} onValueChange={(value) => setDraft((current) => ({ ...current, barangay: value }))} required />
                     </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="edit-owner-approval">Review status</Label>
-                      <select id="edit-owner-approval" value={draft.status} onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value as "pending" | "approved" | "rejected" }))} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm">
-                        <option value="pending">Pending review</option>
-                        <option value="approved">Approved</option>
-                        <option value="rejected">Rejected</option>
-                      </select>
-                    </div>
                     <div className="flex justify-end gap-2">
                       <Button type="button" variant="outline" onClick={() => setEditing(false)}>Cancel</Button>
                       <Button type="button" onClick={saveOwnerDraft}>Save changes</Button>
@@ -855,11 +762,6 @@ const Owners = () => {
                 )}
 
                 <div className="flex flex-col gap-2">
-                  {!editing && selected.status === "pending" ? (
-                    <Button type="button" disabled={Boolean(updatingOwnerId)} onClick={() => void updateOwnerStatus(selected, "approved")} className="h-10 w-full rounded-xl text-[12px] font-bold shadow-glow">
-                      <Check className="size-4" />{updatingOwnerId === selected.id ? "Approving..." : "Approve owner"}
-                    </Button>
-                  ) : null}
                   {!editing ? (
                     <Button type="button" onClick={() => navigate("/registrations")} className="h-10 w-full rounded-xl text-[12px] font-bold shadow-glow">
                       <Plus className="size-4" />Register a pet for {selected.name.split(" ")[0]}

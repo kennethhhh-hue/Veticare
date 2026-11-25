@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowRight, Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { Brand } from "@/components/veticare/brand";
@@ -10,9 +10,11 @@ import { Label } from "@/components/ui/label";
 import { BarangaySelect } from "@/components/owner-app/barangay-select";
 import { supabase } from "@/integrations/supabase/client";
 import { signInAndGetRole } from "@/integrations/supabase/auth-context";
+import { clearOwnerSessionExpired } from "@/hooks/use-owner-session-timeout";
 
 const Login = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -72,6 +74,7 @@ const Login = () => {
       }
       setSubmitting(false);
       if (data.session) {
+        clearOwnerSessionExpired();
         toast.success("Owner account created.");
         navigate("/app", { replace: true });
         return;
@@ -94,6 +97,7 @@ const Login = () => {
     const destination =
       result.role === "admin" ? "/" : result.role === "personnel" ? "/personnel" : "/app";
     toast.success("Signed in successfully.");
+    if (result.role === "owner") clearOwnerSessionExpired();
     navigate(destination, { replace: true });
   };
 
@@ -219,6 +223,9 @@ const Login = () => {
               </div>
             ) : null}
 
+            {searchParams.get("expired") === "1" ? (
+              <p role="status" className="rounded-lg border border-warning/25 bg-warning/10 p-3 text-[12px] text-foreground">Your login expired after 15 minutes of inactivity. Please sign in again.</p>
+            ) : null}
             {signupMessage ? <p className="rounded-lg bg-primary-soft p-3 text-[12px] text-foreground" role="status">{signupMessage}</p> : null}
             {error ? <p className="text-[12px] text-destructive" role="alert">{error}</p> : null}
 

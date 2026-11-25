@@ -6,40 +6,15 @@ import { AppShell } from "@/components/veticare/app-shell";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { ActivityChart } from "@/components/dashboard/activity-chart";
 import { VerificationQueue } from "@/components/dashboard/verification-queue";
-import { PersonnelReviewQueue } from "@/components/dashboard/personnel-review-queue";
-import { QuickActions } from "@/components/dashboard/quick-actions";
-import { ActivityFeed } from "@/components/dashboard/activity-feed";
 import { SummaryCards } from "@/components/dashboard/summary-cards";
-import { OwnerRequestQueue } from "@/components/dashboard/owner-request-queue";
-import { admin, kpis, type FeedItem, type Kpi, type RangeKey } from "@/data/veticare";
+import { admin, kpis, type Kpi, type RangeKey } from "@/data/veticare";
 import { PHILIPPINE_TIME_ZONE } from "@/lib/philippine-date";
 import { supabase } from "@/integrations/supabase/client";
 
 interface DashboardSnapshot {
   metrics: Record<string, { value: number; caption: string; delta: number }>;
   series: Record<string, number[]>;
-  recent: Array<{
-    id: string;
-    actor: string;
-    action: string;
-    target: string;
-    destination: string;
-    type: string;
-    created_at: string;
-  }>;
 }
-
-const feedType = (eventType: string): FeedItem["type"] => {
-  if (eventType.startsWith("adoption_")) return "adopt";
-  if (eventType.endsWith("approved")) return "approve";
-  if (eventType.endsWith("rejected")) return "reject";
-  if (eventType === "impound_logged") return "impound";
-  return "register";
-};
-
-const scrollTo = (id: string) => {
-  document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
-};
 
 const Dashboard = () => {
   const [range, setRange] = useState<RangeKey>("30d");
@@ -52,9 +27,7 @@ const Dashboard = () => {
     delta: 0,
     series: Array.from({ length: 12 }, () => 0),
   })));
-  const [recentActivity, setRecentActivity] = useState<FeedItem[]>([]);
   const [dashboardLoading, setDashboardLoading] = useState(true);
-  const [dashboardError, setDashboardError] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 60_000);
@@ -65,13 +38,10 @@ const Dashboard = () => {
     let active = true;
     const loadDashboardData = async () => {
       setDashboardLoading(true);
-      setDashboardError(null);
       const { data, error } = await supabase.rpc("get_admin_dashboard_data");
       if (!active) return;
       if (error) {
-        setDashboardError(error.message);
         setLiveKpis(kpis.map((kpi) => ({ ...kpi, value: 0, caption: "Data unavailable", delta: 0, series: Array.from({ length: 12 }, () => 0) })));
-        setRecentActivity([]);
         toast.error("Unable to load dashboard data", { description: error.message });
         setDashboardLoading(false);
         return;
@@ -84,15 +54,6 @@ const Dashboard = () => {
         caption: snapshot.metrics[kpi.id]?.caption ?? "No data",
         delta: snapshot.metrics[kpi.id]?.delta ?? 0,
         series: snapshot.series[kpi.id] ?? Array.from({ length: 12 }, () => 0),
-      })));
-      setRecentActivity(snapshot.recent.map((item) => ({
-        id: item.id,
-        actor: item.actor,
-        action: item.action,
-        target: item.target,
-        time: new Date(item.created_at).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short", timeZone: PHILIPPINE_TIME_ZONE }),
-        type: feedType(item.type),
-        destination: item.destination,
       })));
       setDashboardLoading(false);
     };
@@ -124,34 +85,6 @@ const Dashboard = () => {
     timeZone: PHILIPPINE_TIME_ZONE,
   }).format(now));
   const greeting = philippineHour < 12 ? "Good morning" : philippineHour < 18 ? "Good afternoon" : "Good evening";
-
-  const handleQuickAction = (id: string) => {
-    if (id === "review") {
-      scrollTo("verification-queue");
-      return;
-    }
-    if (id === "add-pet") {
-      navigate("/registrations");
-      return;
-    }
-    if (id === "owners") {
-      navigate("/owners");
-      return;
-    }
-    if (id === "impound") {
-      navigate("/impounded-dogs");
-      return;
-    }
-    if (id === "pet-id") {
-      navigate("/pet-id");
-      return;
-    }
-    if (id === "adoptions") {
-      navigate("/adoptions");
-      return;
-    }
-    navigate("/pet-id");
-  };
 
   return (
     <AppShell>
@@ -194,18 +127,9 @@ const Dashboard = () => {
         ))}
       </section>
 
-      <div className="mt-4 grid items-start gap-4 sm:mt-5 sm:gap-5 xl:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)]">
-        <div className="space-y-4 sm:space-y-5">
-          <ActivityChart range={range} onRangeChange={setRange} />
-          <VerificationQueue id="verification-queue" />
-          <PersonnelReviewQueue />
-          <OwnerRequestQueue />
-        </div>
-
-        <div className="space-y-4 sm:space-y-5 xl:sticky xl:top-[88px]">
-          <QuickActions onAction={handleQuickAction} />
-          <ActivityFeed items={recentActivity} loading={dashboardLoading} error={dashboardError} />
-        </div>
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:mt-5 sm:gap-5">
+        <ActivityChart range={range} onRangeChange={setRange} />
+        <VerificationQueue id="verification-queue" />
       </div>
 
       <div className="mt-4 sm:mt-5">

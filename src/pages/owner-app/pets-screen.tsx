@@ -1,4 +1,4 @@
-import { ChevronRight, Clock, Plus } from "lucide-react";
+import { Clock, Pencil, Plus } from "lucide-react";
 import { PetPhoto } from "@/components/owner-app/pet-photo";
 import type { OwnerPet } from "@/data/owner-app";
 
@@ -7,9 +7,10 @@ interface PetsScreenProps {
   loading: boolean;
   onAddPet: () => void;
   onOpenPet: (pet: OwnerPet) => void;
+  onEditPet: (pet: OwnerPet) => void;
 }
 
-export function PetsScreen({ pets, loading, onAddPet, onOpenPet }: PetsScreenProps) {
+export function PetsScreen({ pets, loading, onAddPet, onOpenPet, onEditPet }: PetsScreenProps) {
   return (
     <div className="pb-6">
       <header className="flex items-start justify-between gap-3 px-5 pt-5">
@@ -47,47 +48,50 @@ export function PetsScreen({ pets, loading, onAddPet, onOpenPet }: PetsScreenPro
             </button>
           </div>
         ) : pets.map((pet) => (
-          <button
-            key={pet.id}
-            type="button"
-            onClick={() => onOpenPet(pet)}
-            className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-2.5 text-left shadow-card transition-colors hover:border-primary/25"
-          >
-            <PetPhoto
-              src={pet.photoUrl}
-              alt={pet.name}
-              species={pet.species}
-              className="size-[76px] shrink-0 rounded-xl"
-            />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <p className="truncate text-[14px] font-extrabold tracking-[-0.01em] text-foreground">
-                  {pet.name}
-                </p>
-                <span className="shrink-0 rounded bg-primary-soft px-1 py-0.5 text-[8px] font-bold text-primary">
-                  {pet.species}
-                </span>
-              </div>
-              <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
-                {pet.breed} • {pet.age} • {pet.sex}
-              </p>
-              <div className="mt-1 flex flex-wrap gap-1">
-                  {pet.tags.slice(0, 2).map((tag) => (
-                  <span
-                    key={tag}
-                    className="rounded border border-border px-1 py-0.5 text-[8px] font-semibold text-muted-foreground"
-                  >
-                    {tag}
+          <div key={pet.id} className="relative">
+            <button
+              type="button"
+              onClick={() => onOpenPet(pet)}
+              className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-2.5 pr-12 text-left shadow-card transition-colors hover:border-primary/25"
+            >
+              <PetPhoto
+                src={pet.photoUrl}
+                alt={pet.name}
+                species={pet.species}
+                className="size-[76px] shrink-0 rounded-xl"
+              />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <p className="truncate text-[14px] font-extrabold tracking-[-0.01em] text-foreground">
+                    {pet.name}
+                  </p>
+                  <span className="shrink-0 rounded bg-primary-soft px-1 py-0.5 text-[8px] font-bold text-primary">
+                    {pet.species}
                   </span>
-                ))}
+                </div>
+                <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                  {pet.breed} • {pet.age} • {pet.sex}
+                </p>
+                <div className="mt-1 flex flex-wrap gap-1">
+                    {pet.tags.slice(0, 2).map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded border border-border px-1 py-0.5 text-[8px] font-semibold text-muted-foreground"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+                <p className="mt-1 flex items-center gap-1 text-[9px] font-semibold text-warning">
+                  <Clock className="size-2.5" />
+                  {pet.registrationStatus === "pending" ? "Awaiting city vet review" : pet.nextDue.title}
+                </p>
               </div>
-              <p className="mt-1 flex items-center gap-1 text-[9px] font-semibold text-warning">
-                <Clock className="size-2.5" />
-                {pet.registrationStatus === "pending" ? "Awaiting city vet review" : pet.nextDue.title}
-              </p>
-            </div>
-            <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-          </button>
+            </button>
+            <button type="button" onClick={() => onEditPet(pet)} className="absolute right-2.5 top-2.5 grid size-8 place-items-center rounded-lg border border-border bg-card text-primary hover:bg-secondary" aria-label={`Edit ${pet.name}'s profile`} title="Edit pet profile">
+              <Pencil className="size-3.5" />
+            </button>
+          </div>
         ))}
 
         {!loading && pets.length > 0 ? (

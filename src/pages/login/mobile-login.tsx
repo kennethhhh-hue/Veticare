@@ -296,7 +296,7 @@ export function MobileLogin({ variant }: MobileLoginProps) {
                   <div className="mt-4 flex items-start gap-2 rounded-xl border border-info/20 bg-info/5 px-2.5 py-2">
                     <Info className="mt-0.5 size-3.5 shrink-0 text-info" />
                     <p className="text-[9.5px] leading-relaxed text-muted-foreground">
-                      Sign in with an account created or invited in Supabase Authentication.
+                      Sign in with your Veticare account.
                     </p>
                   </div>
 

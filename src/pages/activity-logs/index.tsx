@@ -191,7 +191,7 @@ const ActivityLogs = () => {
       </section>
 
       <p className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10.5px] text-muted-foreground/80">
-        <span className="rounded-full border border-border bg-card px-2 py-0.5 font-semibold">Supabase audit trail</span>
+        <span className="rounded-full border border-border bg-card px-2 py-0.5 font-semibold">Audit trail</span>
         IP addresses are not collected by the current audit schema.
       </p>
     </AppShell>

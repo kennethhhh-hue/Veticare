@@ -20,9 +20,11 @@ export interface ImpoundedDog {
   locationFound: string;
   impoundStatus: AnimalImpoundStatus;
   adoptionStatus: AnimalAdoptionStatus;
+  photoUrl?: string;
   days: number;
   status: ImpoundStatus;
   vaccinated: boolean;
+  vaccineName?: string;
   notes: string;
 }
 

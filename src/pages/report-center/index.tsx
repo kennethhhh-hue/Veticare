@@ -140,7 +140,7 @@ const Reports = () => {
     setStatus("all");
     setPage(1);
     void loadReports();
-    toast.success("Report library refreshed from Supabase.");
+    toast.success("Report library refreshed.");
   };
 
   const getPeriodBounds = () => {
@@ -394,7 +394,7 @@ const Reports = () => {
 
         <p className="mt-2.5 flex items-center gap-1.5 text-[10px] text-muted-foreground/80">
           <CalendarRange className="size-3" />
-            Reports are generated from live Supabase records and saved to this library.
+            Generated reports appear in this library.
         </p>
       </section>
 
@@ -580,9 +580,9 @@ const Reports = () => {
 
       <p className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10.5px] text-muted-foreground/80">
         <span className="rounded-full border border-border bg-card px-2 py-0.5 font-semibold">
-          Supabase report library
+          Report library
         </span>
-        CSV snapshots are stored in the Supabase report library.
+        CSV snapshots are saved here.
       </p>
     </AppShell>
   );

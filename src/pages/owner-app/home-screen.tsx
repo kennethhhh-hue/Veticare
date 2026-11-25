@@ -217,14 +217,14 @@ export function HomeScreen({
                   </div>
                   <div className="shrink-0 text-right">
                     <p className="text-[8.5px] font-bold uppercase tracking-[0.12em] text-muted-foreground/80">Health records</p>
-                    <p className="text-[10px] font-semibold text-muted-foreground">{pet.vaccines.length ? `${pet.vaccines.length} records` : "Not available"}</p>
+                    <p className="text-[10px] font-semibold text-muted-foreground">{pet.vaccinationsUnavailable ? "Unavailable" : pet.vaccines.length ? "Vaccinated" : "Not vaccinated"}</p>
                   </div>
                 </div>
 
                 <div className={`mt-2 flex items-center gap-2 rounded-xl px-2.5 py-1.5 ${pet.registrationStatus === "pending" ? "bg-warning/10" : "bg-secondary"}`}>
                   <Syringe className={`size-3 shrink-0 ${pet.registrationStatus === "pending" ? "text-warning" : "text-muted-foreground"}`} />
                   <p className={`min-w-0 flex-1 truncate text-[9.5px] font-semibold ${pet.registrationStatus === "pending" ? "text-warning" : "text-muted-foreground"}`}>
-                    {pet.registrationStatus === "pending" ? "Awaiting City Veterinary Office review" : pet.vaccines.length ? "Health record available" : "No health record linked yet"}
+                    {pet.vaccinationsUnavailable ? "Vaccination records unavailable" : pet.vaccines[0]?.name ?? "No vaccinations recorded"}
                   </p>
                 </div>
 

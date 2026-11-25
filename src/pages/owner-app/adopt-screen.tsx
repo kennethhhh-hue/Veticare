@@ -18,6 +18,9 @@ import type { AdoptionRequest, OwnerProfile } from "@/lib/owner-preview-store";
 
 type Filter = "all" | "Dog" | "Cat";
 
+const hasApplication = (requests: AdoptionRequest[], petId: string) =>
+  requests.some((request) => request.petId === petId && request.status !== "rejected");
+
 const filters: { key: Filter; label: string }[] = [
   { key: "all", label: "All pets" },
   { key: "Dog", label: "Dogs" },
@@ -96,6 +99,13 @@ function AdoptDetail({
           ))}
         </div>
 
+        {pet.vaccineName ? (
+          <div className="mt-3.5 rounded-xl border border-border bg-card p-3">
+            <p className="text-[10px] font-semibold text-muted-foreground">Vaccination</p>
+            <p className="mt-0.5 break-words text-[12px] font-bold text-foreground">{pet.vaccineName}</p>
+          </div>
+        ) : null}
+
         {pet.story ? <div className="mt-3.5 rounded-2xl border border-border bg-card p-3.5">
           <h2 className="flex items-center gap-1.5 text-[11.5px] font-extrabold text-foreground">
             <PawPrint className="size-3.5 text-primary" />
@@ -114,6 +124,7 @@ function AdoptDetail({
         </div>
 
         <Button
+          type="button"
           onClick={() => void submitRequest()}
           disabled={requested || requestSaving || requesting}
           className="mt-4 h-11 w-full rounded-xl text-[12px] font-bold shadow-glow"
@@ -147,10 +158,10 @@ export function AdoptScreen({
   const [requestSaving, setRequestSaving] = useState(false);
 
   if (selected) {
-    const alreadyRequested = requests.some((request) => request.petId === selected.id);
+    const alreadyRequested = hasApplication(requests, selected.id);
     return (
       <AdoptDetail
-        pet={selected}
+        pet={pets.find((pet) => pet.id === selected.id) ?? selected}
         onBack={() => setSelected(null)}
         requested={alreadyRequested}
         requestSaving={requestSaving}
@@ -268,7 +279,7 @@ export function AdoptScreen({
               <span className="absolute right-1.5 top-1.5 grid size-6 place-items-center rounded-full bg-card/90 text-destructive backdrop-blur">
                 <Heart className="size-3" />
               </span>
-              {requests.some((request) => request.petId === pet.id) ? (
+              {hasApplication(requests, pet.id) ? (
                 <span className="absolute left-1.5 top-1.5 rounded-full bg-warning/95 px-1.5 py-0.5 text-[8px] font-bold text-foreground">
                   Requested
                 </span>

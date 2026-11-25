@@ -3586,10 +3586,12 @@ export type Database = {
           name: string
           notes: string
           pet_id: string
+          photo_url: string | null
           sex: string
           status: string
           updated_at: string
           vaccinated: boolean
+          vaccine_name: string | null
         }
         Insert: {
           adoption_status?: string
@@ -3607,10 +3609,12 @@ export type Database = {
           name: string
           notes?: string
           pet_id: string
+          photo_url?: string | null
           sex: string
           status?: string
           updated_at?: string
           vaccinated?: boolean
+          vaccine_name?: string | null
         }
         Update: {
           adoption_status?: string
@@ -3628,10 +3632,12 @@ export type Database = {
           name?: string
           notes?: string
           pet_id?: string
+          photo_url?: string | null
           sex?: string
           status?: string
           updated_at?: string
           vaccinated?: boolean
+          vaccine_name?: string | null
         }
         Relationships: []
       }
@@ -3810,7 +3816,9 @@ export type Database = {
           id: string
           impound_id: string
           name: string
+          photo_url: string | null
           sex: string
+          vaccine_name: string | null
         }
         Relationships: []
       }
@@ -3819,6 +3827,14 @@ export type Database = {
       find_rfid_tag_assignment: {
         Args: { p_exclude_pet_id?: string; p_rfid_tag: string }
         Returns: { pet_id: string; pet_name: string }[]
+      }
+      submit_owner_adoption: {
+        Args: { p_impound_id: string }
+        Returns: string
+      }
+      update_owner_pet_profile: {
+        Args: { p_pet_id: string; p_name: string; p_species: string; p_breed: string; p_sex: string; p_age: string; p_weight: string; p_color: string }
+        Returns: boolean
       }
       get_admin_dashboard_data: {
         Args: Record<PropertyKey, never>

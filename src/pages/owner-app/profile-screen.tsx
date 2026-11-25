@@ -20,23 +20,16 @@ import { BarangaySelect } from "@/components/owner-app/barangay-select";
 import { OcvasContactInfo } from "@/components/veticare/ocvas-contact-info";
 import { ProfilePhoto } from "@/components/veticare/profile-photo";
 import { signOut } from "@/integrations/supabase/auth-context";
-import type { OwnerProfile, OwnerRequest } from "@/lib/owner-preview-store";
-import { ownerRequestLabels } from "@/data/owner-app";
+import type { OwnerProfile } from "@/lib/owner-preview-store";
 
 export function ProfileScreen({
   profile,
   petCount,
-  adoptionCount,
-  requests,
-  requestsUnavailable,
   onSave,
   onPhotoUpdated,
 }: {
   profile: OwnerProfile;
   petCount: number;
-  adoptionCount: number;
-  requests: OwnerRequest[];
-  requestsUnavailable?: boolean;
   onSave: (profile: OwnerProfile) => Promise<boolean>;
   onPhotoUpdated: (avatarUrl: string) => void;
 }) {
@@ -94,9 +87,8 @@ export function ProfileScreen({
             >Edit</button>
           </div>
 
-          <div className="mt-3.5 grid grid-cols-3 divide-x divide-border border-t border-border pt-3 text-center">
+          <div className="mt-3.5 grid grid-cols-2 divide-x divide-border border-t border-border pt-3 text-center">
             <div><p className="num text-[16px] font-extrabold text-foreground">{petCount}</p><p className="mt-1 text-[8.5px] font-semibold uppercase text-muted-foreground">Pets</p></div>
-            <div><p className="num text-[16px] font-extrabold text-foreground">{adoptionCount}</p><p className="mt-1 text-[8.5px] font-semibold uppercase text-muted-foreground">Requests</p></div>
             <div><p className="text-[11px] font-extrabold text-foreground">2026</p><p className="mt-1.5 text-[8.5px] font-semibold uppercase text-muted-foreground">Member since</p></div>
           </div>
 
@@ -138,29 +130,6 @@ export function ProfileScreen({
           </button>
         </div>
       </section>
-
-      {requestsUnavailable ? <p role="alert" className="mt-4 px-5 text-[10.5px] text-destructive">Unable to load owner requests. Refresh to try again.</p> : null}
-      {requests.length ? (
-        <section className="mt-4 px-5">
-          <div className="flex items-center justify-between">
-            <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-muted-foreground">My requests</p>
-            <span className="num rounded-full bg-secondary px-2 py-0.5 text-[9px] font-bold text-muted-foreground">{requests.length}</span>
-          </div>
-          <ul className="mt-2 divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
-            {requests.map((request) => (
-              <li key={request.id} className="flex items-start justify-between gap-2 p-3">
-                <span className="min-w-0">
-                  <span className="block text-[10.5px] font-bold text-foreground">{ownerRequestLabels[request.type]} • {request.petName}</span>
-                  {request.details ? <span className="mt-0.5 block break-words text-[9px] text-muted-foreground">{request.details}</span> : null}
-                </span>
-                <span className="shrink-0 rounded-full bg-secondary px-2 py-1 text-[8px] font-bold capitalize text-secondary-foreground">
-                  {request.localOnly ? "Saved on this device" : request.status}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
 
       <section className="mt-4 px-5">
         <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Veticare</p>

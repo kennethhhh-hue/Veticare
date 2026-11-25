@@ -1,37 +1,40 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Download, PawPrint } from "lucide-react";
-import { QRCodeSVG } from "qrcode.react";
+import { QRCodeCanvas, QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
 import { PetPhoto } from "@/components/owner-app/pet-photo";
 import { IdPattern } from "@/components/veticare/id-pattern";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { OwnerPet } from "@/data/owner-app";
+import { formatCalendarDate } from "@/lib/philippine-date";
 
 export function PetIdCard({ pet, ownerName }: { pet: OwnerPet; ownerName?: string }) {
-  const qrValue = pet.registrationStatus === "pending" ? null : pet.qrCode ?? pet.petId;
+  const qrValue = pet.registrationStatus === "approved" ? pet.qrCode : null;
   const [photoOpen, setPhotoOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
+  const qrCanvas = useRef<HTMLCanvasElement>(null);
 
   const downloadQr = () => {
-    const svg = document.getElementById("pet-id-qr-preview");
-    if (!svg || !qrValue) {
+    if (!qrCanvas.current || !qrValue) {
       toast.error("QR code is not available yet.");
       return;
     }
-    const source = new XMLSerializer().serializeToString(svg);
-    const blob = new Blob([source], { type: "image/svg+xml;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${pet.petId || pet.name.replace(/\s+/g, "-")}-qr.svg`;
-    link.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    toast.success("QR code downloaded.");
+    try {
+      const link = document.createElement("a");
+      link.href = qrCanvas.current.toDataURL("image/png");
+      link.download = `${pet.petId.replace(/[^a-z0-9_-]+/gi, "-")}-qr.png`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch {
+      toast.error("Unable to download the PNG on this device.");
+    }
   };
 
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-raised">
+      {qrValue ? <QRCodeCanvas ref={qrCanvas} value={qrValue} size={512} level="M" marginSize={4} hidden aria-hidden="true" /> : null}
       <div className="relative flex items-center justify-between brand-gradient px-4 py-3 text-primary-foreground">
         <div className="flex items-center gap-2">
           <span className="grid size-6 place-items-center rounded-lg bg-primary-foreground/15">
@@ -92,7 +95,7 @@ export function PetIdCard({ pet, ownerName }: { pet: OwnerPet; ownerName?: strin
             <p className="mt-0.5 text-[10px] font-bold leading-snug text-foreground">
               City Veterinary Office
             </p>
-            <p className="text-[9px] text-muted-foreground">Valid through Dec 31, 2026</p>
+            {pet.validThrough ? <p className="text-[9px] text-muted-foreground">Valid through {formatCalendarDate(pet.validThrough)}</p> : null}
             <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-success/10 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-success">
               <span className="size-1 rounded-full bg-success" />
               Verified
@@ -130,6 +133,7 @@ export function PetIdCard({ pet, ownerName }: { pet: OwnerPet; ownerName?: strin
             <DialogDescription>Full-size pet photo preview.</DialogDescription>
           </DialogHeader>
           <PetPhoto src={pet.photoUrl} alt={pet.name} species={pet.species} className="max-h-[75vh] w-full rounded-xl object-contain" />
+          {qrValue ? <Button type="button" onClick={downloadQr} className="w-full"><Download className="size-4" />Download QR (PNG)</Button> : null}
           <Button type="button" variant="outline" onClick={() => setPhotoOpen(false)} className="w-full">Close preview</Button>
         </DialogContent>
       </Dialog>
@@ -142,9 +146,9 @@ export function PetIdCard({ pet, ownerName }: { pet: OwnerPet; ownerName?: strin
           </DialogHeader>
           {qrValue ? (
             <div className="flex flex-col items-center gap-3 py-2">
-              <QRCodeSVG id="pet-id-qr-preview" value={qrValue} size={240} level="M" marginSize={2} className="max-w-full rounded-xl bg-white p-3 ring-1 ring-border" title={`QR code for ${pet.petId}`} />
+              <QRCodeSVG value={qrValue} size={240} level="M" marginSize={4} className="max-w-full rounded-xl bg-white p-3 ring-1 ring-border" title={`QR code for ${pet.petId}`} />
               <p className="num rounded-lg bg-primary-soft px-3 py-1.5 text-sm font-extrabold text-primary">{pet.petId}</p>
-              <Button type="button" onClick={downloadQr} className="w-full"><Download className="size-4" />Download QR (SVG)</Button>
+              <Button type="button" onClick={downloadQr} className="w-full"><Download className="size-4" />Download QR (PNG)</Button>
             </div>
           ) : null}
         </DialogContent>

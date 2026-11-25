@@ -607,7 +607,6 @@ const Registrations = () => {
       </section>
 
       <p className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10.5px] text-muted-foreground/80">
-        <span className="rounded-full border border-border bg-card px-2 py-0.5 font-semibold">Supabase registry</span>
         {pendingCount} registrations await approval
       </p>
 
@@ -645,7 +644,7 @@ const Registrations = () => {
           setPage(1);
           void queryClient.invalidateQueries({ queryKey: sidebarCountKeys.registrations });
           await loadRegistry();
-          toast.success("Pet registration added to Supabase.");
+          toast.success("Pet registration added.");
           return true;
         }}
       />

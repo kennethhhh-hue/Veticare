@@ -17,7 +17,9 @@ import { MetricStrip } from "@/components/admin/metric-strip";
 import { FilterSelect } from "@/components/admin/filter-select";
 import { StatusPill } from "@/components/admin/status-pill";
 import { Pagination } from "@/components/admin/pagination";
-import { IdPattern } from "@/components/veticare/id-pattern";
+import { QRCodeSVG } from "qrcode.react";
+import { PetPhoto } from "@/components/owner-app/pet-photo";
+import { formatCalendarDate, getPhilippineDateKey } from "@/lib/philippine-date";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -33,7 +35,7 @@ import { cn } from "@/lib/utils";
 import { type PetIdRecord, type PetIdStatus } from "@/data/shelter-records";
 import { supabase } from "@/integrations/supabase/client";
 
-type RegistryPetIdRecord = PetIdRecord & { recordId: string };
+type RegistryPetIdRecord = PetIdRecord & { recordId: string; photoUrl?: string; qrCode?: string };
 
 const PAGE_SIZE = 5;
 
@@ -48,7 +50,8 @@ const PetId = () => {
   const [awaitingIssue, setAwaitingIssue] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
-  const [selected, setSelected] = useState<PetIdRecord | null>(null);
+  const [selected, setSelected] = useState<RegistryPetIdRecord | null>(null);
+  const [mediaPreview, setMediaPreview] = useState<"photo" | "qr" | null>(null);
   const [issueOpen, setIssueOpen] = useState(false);
   const [recordToIssue, setRecordToIssue] = useState("");
 
@@ -56,7 +59,7 @@ const PetId = () => {
     setLoading(true);
     setLoadError(null);
     const [{ data: pets, error: petsError }, { data: profiles, error: profilesError }] = await Promise.all([
-      supabase.from("pets").select("id, owner_id, name, species, breed, pet_id, status, pet_id_status, pet_id_issued_at, pet_id_valid_through").in("status", ["pending", "approved"]).order("created_at", { ascending: false }),
+      supabase.from("pets").select("id, owner_id, name, species, breed, pet_id, photo_url, qr_code, status, pet_id_status, pet_id_issued_at, pet_id_valid_through").in("status", ["pending", "approved"]).order("created_at", { ascending: false }),
       supabase.from("profiles").select("id, full_name, email, barangay").eq("role", "owner"),
     ]);
     const error = petsError ?? profilesError;
@@ -70,13 +73,15 @@ const PetId = () => {
     setRecords((pets ?? []).map((pet) => {
       const owner = ownersById.get(pet.owner_id);
       const issuedDate = pet.pet_id_issued_at
-        ? new Date(`${pet.pet_id_issued_at}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "2-digit", year: "numeric" })
+        ? formatCalendarDate(pet.pet_id_issued_at)
         : "Pending approval";
       const validThrough = pet.pet_id_valid_through
-        ? new Date(`${pet.pet_id_valid_through}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "2-digit", year: "numeric" })
+        ? formatCalendarDate(pet.pet_id_valid_through)
         : "—";
       return {
         recordId: pet.id,
+        photoUrl: pet.photo_url ?? undefined,
+        qrCode: pet.qr_code ?? undefined,
         id: pet.pet_id || `Pending • ${pet.id.slice(0, 8)}`,
         pet: pet.name,
         species: pet.species as "Dog" | "Cat",
@@ -85,7 +90,8 @@ const PetId = () => {
         barangay: owner?.barangay || "—",
         issued: issuedDate,
         validThrough,
-        status: (pet.pet_id_status || (pet.status === "approved" ? "active" : "pending")) as PetIdStatus,
+        status: pet.pet_id_status === "active" && pet.pet_id_valid_through && pet.pet_id_valid_through < getPhilippineDateKey()
+          ? "expired" : (pet.pet_id_status as PetIdStatus),
       };
     }));
     setLoading(false);
@@ -132,7 +138,7 @@ const PetId = () => {
     setAwaitingIssue(false);
     setPage(1);
     void loadRegistry();
-    toast.success("Pet ID registry refreshed from Supabase.");
+    toast.success("Pet ID registry refreshed.");
   };
 
   const issuePetId = async (event: FormEvent<HTMLFormElement>) => {
@@ -369,20 +375,7 @@ const PetId = () => {
                 className="grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2.5 px-3.5 py-3.5 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary sm:px-4 xl:grid-cols-[minmax(0,1.1fr)_148px_minmax(0,1.1fr)_92px_96px_92px] xl:gap-4 xl:px-5"
               >
                 <div className="order-1 flex min-w-0 items-center gap-2.5 xl:order-none">
-                  <span
-                    className={cn(
-                      "grid size-9 shrink-0 place-items-center rounded-xl text-[11px] font-bold",
-                      record.species === "Dog"
-                        ? "bg-primary-soft text-primary"
-                        : "bg-warning/12 text-warning",
-                    )}
-                  >
-                    {record.pet
-                      .split(" ")
-                      .map((part) => part[0])
-                      .slice(0, 2)
-                      .join("")}
-                  </span>
+                  <PetPhoto src={record.photoUrl} alt={record.pet} species={record.species} className="size-9 shrink-0 rounded-lg" />
                   <div className="min-w-0">
                     <p className="truncate text-[12.5px] font-bold text-foreground">{record.pet}</p>
                     <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
@@ -463,15 +456,25 @@ const PetId = () => {
       </section>
 
       <p className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10.5px] text-muted-foreground/80">
-        <span className="rounded-full border border-border bg-card px-2 py-0.5 font-semibold">
-          Supabase registry
-        </span>
         IDs are issued automatically when a registration is approved
       </p>
 
-      <Dialog open={Boolean(selected)} onOpenChange={(open) => (!open ? setSelected(null) : null)}>
+      <Dialog open={Boolean(selected)} onOpenChange={(open) => { if (!open) { setSelected(null); setMediaPreview(null); } }}>
         <DialogContent className="max-h-[88vh] w-[calc(100%-2rem)] max-w-[480px] overflow-y-auto rounded-2xl border-border p-5 sm:rounded-2xl">
-          {selected ? (
+          {selected && mediaPreview ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>{mediaPreview === "photo" ? "Pet photo" : "Pet ID QR code"}</DialogTitle>
+                <DialogDescription>{selected.pet}</DialogDescription>
+              </DialogHeader>
+              {mediaPreview === "photo" && selected.photoUrl ? (
+                <img src={selected.photoUrl} alt={selected.pet} className="mx-auto max-h-[65dvh] w-full rounded-xl object-contain" />
+              ) : mediaPreview === "qr" && selected.qrCode ? (
+                <QRCodeSVG value={selected.qrCode} size={320} level="M" marginSize={4} className="mx-auto h-auto w-full max-w-[320px] rounded-xl bg-white" title={selected.id} />
+              ) : null}
+              <Button variant="outline" onClick={() => setMediaPreview(null)}>Back to Pet ID</Button>
+            </>
+          ) : selected ? (
             <>
               <DialogHeader className="pr-6 text-left">
                 <DialogTitle className="text-[16px] font-extrabold tracking-[-0.02em]">
@@ -500,20 +503,11 @@ const PetId = () => {
 
                   <div className="p-4">
                     <div className="flex items-center gap-3">
-                      <span
-                        className={cn(
-                          "grid size-12 shrink-0 place-items-center rounded-xl text-[13px] font-bold",
-                          selected.species === "Dog"
-                            ? "bg-primary-soft text-primary"
-                            : "bg-warning/12 text-warning",
-                        )}
-                      >
-                        {selected.pet
-                          .split(" ")
-                          .map((part) => part[0])
-                          .slice(0, 2)
-                          .join("")}
-                      </span>
+                      {selected.photoUrl ? (
+                        <button type="button" onClick={() => setMediaPreview("photo")} className="shrink-0 rounded-xl focus-visible:ring-2 focus-visible:ring-primary" aria-label="Enlarge pet photo">
+                          <PetPhoto src={selected.photoUrl} alt={selected.pet} species={selected.species} className="size-14 rounded-xl" />
+                        </button>
+                      ) : <PetPhoto alt={selected.pet} species={selected.species} className="size-14 shrink-0 rounded-xl" />}
                       <div className="min-w-0">
                         <p className="truncate text-[16px] font-extrabold tracking-[-0.02em] text-foreground">
                           {selected.pet}
@@ -557,13 +551,17 @@ const PetId = () => {
                           <StatusPill status={selected.status} />
                         </div>
                       </div>
-                      <IdPattern value={selected.id} />
+                      {selected.qrCode ? (
+                        <button type="button" onClick={() => setMediaPreview("qr")} className="rounded-lg border border-border bg-white p-1 focus-visible:ring-2 focus-visible:ring-primary" aria-label="Enlarge Pet ID QR code">
+                          <QRCodeSVG value={selected.qrCode} size={64} level="M" marginSize={2} />
+                        </button>
+                      ) : null}
                     </div>
                   </div>
 
                   <div className="flex items-center justify-between bg-secondary/70 px-4 py-2">
                     <p className="text-[8px] font-medium tracking-wide text-muted-foreground">
-                      Bacoor City • Veticare pet registry
+                      Batangas City • Veticare pet registry
                     </p>
                     <p className="text-[8px] font-bold tracking-wide text-muted-foreground">
                       {selected.status === "active" ? "OFFICIAL PET ID" : "PENDING APPROVAL"}

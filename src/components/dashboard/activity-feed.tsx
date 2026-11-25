@@ -49,12 +49,6 @@ export function ActivityFeed({ items, loading, error }: ActivityFeedProps) {
             Recent activity
           </h2>
         </div>
-        {!loading && !error && items.length > 0 ? (
-          <span className="flex items-center gap-1.5 rounded-full bg-secondary px-2 py-1 text-[9.5px] font-bold uppercase tracking-wide text-muted-foreground">
-            <span className="size-1.5 rounded-full bg-success" />
-            Supabase
-          </span>
-        ) : null}
       </div>
 
       <ul className="relative mt-3 space-y-3">

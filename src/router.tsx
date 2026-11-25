@@ -1,6 +1,7 @@
 import Dashboard from "./pages/dashboard";
 import Login from "./pages/login";
 import { OwnerPasswordReset, ownerPasswordResetPath } from "./pages/login/owner-password-reset";
+import { AcceptInvite } from "./pages/login/accept-invite";
 import OwnerApp from "./pages/owner-app";
 import Registrations from "./pages/registrations";
 import Owners from "./pages/owners";
@@ -30,6 +31,11 @@ export const routers = [
     path: "/login/admin",
     name: "login-admin",
     element: <Login />,
+  },
+  {
+    path: "/login/accept-invite",
+    name: "accept-invite",
+    element: <AcceptInvite />,
   },
   {
     path: "/login/owner",

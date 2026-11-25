@@ -6,6 +6,7 @@ import {
 import type { Session } from "@supabase/supabase-js";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { ownerExpiredLoginPath, ownerSessionExpired } from "@/hooks/use-owner-session-timeout";
 import { supabase } from "./client";
 import { AuthContext, useAuth, type ApprovalStatus, type UserRole } from "./auth-context";
 
@@ -120,7 +121,7 @@ export function RequireAuth({
   }
 
   if (!session) {
-    return <Navigate to="/login" replace state={{ from: location }} />;
+    return <Navigate to={requiredRole === "owner" && ownerSessionExpired() ? ownerExpiredLoginPath : "/login"} replace state={{ from: location }} />;
   }
 
   if (!role) {

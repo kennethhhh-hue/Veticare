@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   CalendarClock,
   IdCard,
+  Pencil,
   Syringe,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -23,11 +24,12 @@ interface PetDetailProps {
   pet: OwnerPet;
   onBack: () => void;
   onShowId: (pet: OwnerPet) => void;
+  onEdit: () => void;
   onPhotoUpdated: (petId: string, photoUrl: string) => void;
   onRequest: (request: OwnerRequestInput) => Promise<boolean>;
 }
 
-export function PetDetail({ pet, onBack, onShowId, onPhotoUpdated, onRequest }: PetDetailProps) {
+export function PetDetail({ pet, onBack, onShowId, onEdit, onPhotoUpdated, onRequest }: PetDetailProps) {
   const { vaccinations } = usePetVaccinations(pet.id);
   const [visitOpen, setVisitOpen] = useState(false);
   const [visitDate, setVisitDate] = useState("");
@@ -125,7 +127,7 @@ export function PetDetail({ pet, onBack, onShowId, onPhotoUpdated, onRequest }: 
           disabled={uploadingPhoto}
           className="absolute right-4 top-4 h-9 rounded-full border-transparent bg-card/90 text-[11px] backdrop-blur hover:bg-card"
         >
-          <span aria-hidden="true">📷</span>{uploadingPhoto ? "Uploading…" : "Change Photo"}
+          {uploadingPhoto ? "Uploading…" : "Change Photo"}
         </Button>
         <input ref={photoInput} type="file" accept={photoTypes.join(",")} onChange={(event) => void changePhoto(event)} hidden />
         <div className="absolute inset-x-5 bottom-4">
@@ -149,7 +151,12 @@ export function PetDetail({ pet, onBack, onShowId, onPhotoUpdated, onRequest }: 
       </div>
 
       <div className="px-5">
-        <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2.5 rounded-2xl border border-border bg-card p-3.5">
+        <div className="mt-4 flex justify-end">
+          <Button type="button" size="sm" variant="outline" onClick={onEdit}>
+            <Pencil className="size-3.5" />Edit pet profile
+          </Button>
+        </div>
+        <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2.5 rounded-2xl border border-border bg-card p-3.5">
           {[
             { label: "Pet ID", value: pet.petId },
             { label: "Registered", value: pet.registered },
@@ -191,10 +198,16 @@ export function PetDetail({ pet, onBack, onShowId, onPhotoUpdated, onRequest }: 
         </div> : null}
 
         <section aria-labelledby="pet-vaccination-history" className="mt-4 space-y-2 rounded-2xl border border-border bg-card p-3.5">
-          <h2 id="pet-vaccination-history" className="flex items-center gap-1.5 text-[12px] font-extrabold text-foreground">
-            <Syringe className="size-3.5 text-primary" aria-hidden="true" />
-            Vaccination history
-          </h2>
+          <div className="flex items-center justify-between gap-2">
+            <h2 id="pet-vaccination-history" className="flex items-center gap-1.5 text-[12px] font-extrabold text-foreground">
+              <Syringe className="size-3.5 text-primary" aria-hidden="true" />Health record
+            </h2>
+            {vaccinations.isSuccess ? (
+              <span className={`rounded-full px-2 py-1 text-[9px] font-bold ${vaccinations.data?.length ? "bg-success/10 text-success" : "bg-secondary text-muted-foreground"}`}>
+                {vaccinations.data?.length ? "Vaccinated" : "Not vaccinated"}
+              </span>
+            ) : null}
+          </div>
           {vaccinations.isPending ? <p role="status" className="text-[10.5px] text-muted-foreground">Loading vaccination records…</p> : null}
           {vaccinations.isError ? <p role="alert" className="text-[10.5px] text-destructive">Vaccination records are currently unavailable.</p> : null}
           {vaccinations.data?.length ? (

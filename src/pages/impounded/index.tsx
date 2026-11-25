@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Clock,
@@ -17,6 +17,7 @@ import { MetricStrip } from "@/components/admin/metric-strip";
 import { FilterSelect } from "@/components/admin/filter-select";
 import { Pagination } from "@/components/admin/pagination";
 import { PersonnelImpoundReports } from "@/components/admin/personnel-impound-reports";
+import { PetPhoto } from "@/components/owner-app/pet-photo";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -30,6 +31,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BarangaySelect } from "@/components/owner-app/barangay-select";
 import {
   Dialog,
   DialogContent,
@@ -43,9 +45,11 @@ import {
   type ImpoundStatus,
 } from "@/data/shelter-records";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/integrations/supabase/auth-context";
 import { sidebarCountKeys } from "@/data/veticare";
 
 const PAGE_SIZE = 5;
+const photoTypes = ["image/jpeg", "image/png", "image/webp"];
 
 const adoptionLabel = {
   not_available: "Not available",
@@ -81,8 +85,10 @@ const mapImpoundRow = (row: {
   impounded_at: string;
   impound_status: string;
   adoption_status: string;
+  photo_url: string | null;
   status: string;
   vaccinated: boolean;
+  vaccine_name: string | null;
   notes: string;
 }): ImpoundedDog => {
   const displayDate = new Date(`${row.impounded_at}T12:00:00`).toLocaleDateString(undefined, {
@@ -109,15 +115,18 @@ const mapImpoundRow = (row: {
     locationFound: row.area,
     impoundStatus: row.impound_status as ImpoundedDog["impoundStatus"],
     adoptionStatus: row.adoption_status as ImpoundedDog["adoptionStatus"],
+    photoUrl: row.photo_url ?? undefined,
     status: row.status as ImpoundStatus,
     days,
     vaccinated: row.vaccinated,
+    vaccineName: row.vaccine_name ?? undefined,
     notes: row.notes,
   };
 };
 
 const ImpoundedDogs = () => {
   const queryClient = useQueryClient();
+  const { session } = useAuth();
   const [rows, setRows] = useState<ImpoundedDog[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -129,6 +138,10 @@ const ImpoundedDogs = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<ImpoundedDog | null>(null);
+  const photoInput = useRef<HTMLInputElement>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [vaccineName, setVaccineName] = useState<string | null>(null);
+  const [savingVaccination, setSavingVaccination] = useState(false);
   const [intakeOpen, setIntakeOpen] = useState(false);
   const [savingIntake, setSavingIntake] = useState(false);
   const [adoptionUpdateId, setAdoptionUpdateId] = useState<string | null>(null);
@@ -191,7 +204,7 @@ const ImpoundedDogs = () => {
     setPage(1);
     void loadImpounds();
     void queryClient.invalidateQueries({ queryKey: sidebarCountKeys.impounded });
-    toast.success("Impound list refreshed from Supabase.");
+    toast.success("Impound list refreshed.");
   };
 
   const refreshIntakes = () => {
@@ -229,6 +242,7 @@ const ImpoundedDogs = () => {
 
   const logImpound = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!intake.location) { toast.error("Select a Batangas City barangay."); return; }
     setSavingIntake(true);
     const impoundId = `IMP-${Date.now().toString().slice(-8)}`;
     const petId = `PET-${Date.now().toString().slice(-8)}`;
@@ -260,16 +274,65 @@ const ImpoundedDogs = () => {
     toast.success(`${record.name} added to the impound register.`);
   };
 
-  const toggleVaccinated = async (dog: ImpoundedDog) => {
-    const vaccinated = !dog.vaccinated;
-    const { error } = await supabase.from("impounds").update({ vaccinated }).eq("id", dog.id);
-    if (error) {
-      toast.error(error.message);
+  const saveVaccination = async (dog: ImpoundedDog, name: string | null) => {
+    const nextName = name?.trim() ?? null;
+    if (savingVaccination || nextName === "") return;
+    const vaccinated = nextName !== null;
+    setSavingVaccination(true);
+    const { data, error } = await supabase.from("impounds").update({ vaccinated, vaccine_name: nextName })
+      .eq("id", dog.id).select("id").maybeSingle();
+    setSavingVaccination(false);
+    if (error || !data) {
+      toast.error(error?.message ?? "Unable to update the vaccination record.");
       return;
     }
-    setRows((current) => current.map((item) => item.id === dog.id ? { ...item, vaccinated } : item));
-    setSelected((current) => current?.id === dog.id ? { ...current, vaccinated } : current);
+    const update = { vaccinated, vaccineName: nextName ?? undefined };
+    setRows((current) => current.map((item) => item.id === dog.id ? { ...item, ...update } : item));
+    setSelected((current) => current?.id === dog.id ? { ...current, ...update } : current);
+    setVaccineName(null);
     toast.success(`${dog.name}: vaccination marked ${vaccinated ? "up to date" : "not vaccinated"}.`);
+  };
+
+  const changePhoto = async (event: ChangeEvent<HTMLInputElement>) => {
+    const photo = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (!photo || !selected || uploadingPhoto) return;
+    if (!photo.size || !photoTypes.includes(photo.type) || photo.size > 5 * 1024 * 1024) {
+      toast.error("Choose a JPG, PNG, or WebP photo up to 5 MB.");
+      return;
+    }
+    const userId = session?.user.id;
+    if (!userId) {
+      toast.error("Sign in again to update this photo.");
+      return;
+    }
+
+    const { id } = selected;
+    const extension = photo.type === "image/jpeg" ? "jpg" : photo.type.split("/")[1];
+    const path = `${userId}/impounds/${crypto.randomUUID()}.${extension}`;
+    const storage = supabase.storage.from("veticare-pet-photos");
+    setUploadingPhoto(true);
+    try {
+      const { error: uploadError } = await storage.upload(path, photo, { contentType: photo.type });
+      if (uploadError) throw uploadError;
+      const photoUrl = storage.getPublicUrl(path).data.publicUrl;
+      const { data, error } = await supabase.from("impounds").update({ photo_url: photoUrl })
+        .eq("id", id).select("photo_url").maybeSingle();
+      if (error || !data) {
+        const check = await supabase.from("impounds").select("photo_url").eq("id", id).maybeSingle();
+        if (check.data?.photo_url !== photoUrl) {
+          if (!check.error) await storage.remove([path]);
+          throw new Error(error?.message ?? "Unable to save the impound photo.");
+        }
+      }
+      setRows((current) => current.map((dog) => dog.id === id ? { ...dog, photoUrl } : dog));
+      setSelected((current) => current?.id === id ? { ...current, photoUrl } : current);
+      toast.success("Impound photo updated.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to update the impound photo.");
+    } finally {
+      setUploadingPhoto(false);
+    }
   };
 
   const metrics = [
@@ -589,13 +652,10 @@ const ImpoundedDogs = () => {
       </section>
 
       <p className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10.5px] text-muted-foreground/80">
-          <span className="rounded-full border border-border bg-card px-2 py-0.5 font-semibold">
-          Supabase registry
-        </span>
-        {rows.filter((dog) => dog.days >= 30).length} dogs have been in care for 30+ days
+          {rows.filter((dog) => dog.days >= 30).length} dogs have been in care for 30+ days
       </p>
 
-      <Dialog open={Boolean(selected)} onOpenChange={(open) => (!open ? setSelected(null) : null)}>
+      <Dialog open={Boolean(selected)} onOpenChange={(open) => { if (!open && !savingVaccination) { setSelected(null); setVaccineName(null); } }}>
         <DialogContent className="max-h-[88vh] w-[calc(100%-2rem)] max-w-[480px] overflow-y-auto rounded-2xl border-border p-5 sm:rounded-2xl">
           {selected ? (
             <>
@@ -616,6 +676,13 @@ const ImpoundedDogs = () => {
               </DialogHeader>
 
               <div className="space-y-3">
+                <div className="space-y-2">
+                  {selected.photoUrl ? <PetPhoto src={selected.photoUrl} alt={selected.name} species={selected.animalType} className="h-32 rounded-xl" /> : null}
+                  <Button type="button" size="sm" variant="outline" disabled={uploadingPhoto} onClick={() => photoInput.current?.click()}>
+                    {uploadingPhoto ? "Uploading…" : selected.photoUrl ? "Change adoption photo" : "Add adoption photo"}
+                  </Button>
+                  <input ref={photoInput} type="file" accept={photoTypes.join(",")} onChange={(event) => void changePhoto(event)} hidden />
+                </div>
                 <div className="flex items-center gap-2">
                   <span className="num rounded-full bg-secondary px-2 py-1 text-[10px] font-semibold text-secondary-foreground">
                     {selected.days} days in care
@@ -635,7 +702,7 @@ const ImpoundedDogs = () => {
                     { label: "Adoption status", value: getAdoptionLabel(selected) },
                     {
                       label: "Vaccination",
-                      value: selected.vaccinated ? "Up to date" : "Not vaccinated",
+                      value: selected.vaccinated ? selected.vaccineName ?? "Vaccinated" : "Not vaccinated",
                     },
                   ].map((item) => (
                     <div key={item.label} className="flex items-center justify-between gap-3 px-3.5 py-2.5">
@@ -659,14 +726,23 @@ const ImpoundedDogs = () => {
                 </div>
 
                 <div className="flex flex-col gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => void toggleVaccinated(selected)}
-                    className="h-10 w-full rounded-xl border-border text-[12px] font-semibold"
-                  >
-                    <Syringe className="size-4" />
-                    {selected.vaccinated ? "Mark as not vaccinated" : "Mark as vaccinated"}
-                  </Button>
+                  {vaccineName !== null ? (
+                    <form className="space-y-2 rounded-xl border border-border p-3" onSubmit={(event) => { event.preventDefault(); void saveVaccination(selected, vaccineName); }}>
+                      <Label htmlFor="impound-vaccine">Vaccine name</Label>
+                      <Input id="impound-vaccine" value={vaccineName} onChange={(event) => setVaccineName(event.target.value)} maxLength={120} required disabled={savingVaccination} />
+                      <div className="flex justify-end gap-2">
+                        <Button type="button" size="sm" variant="outline" disabled={savingVaccination} onClick={() => setVaccineName(null)}>Cancel</Button>
+                        <Button type="submit" size="sm" disabled={savingVaccination || !vaccineName.trim()}>{savingVaccination ? "Saving…" : "Save vaccination"}</Button>
+                      </div>
+                    </form>
+                  ) : (
+                    <>
+                      <Button variant="outline" disabled={savingVaccination} onClick={() => setVaccineName(selected.vaccineName ?? "")}>
+                        <Syringe className="size-4" />{selected.vaccinated ? "Edit vaccine name" : "Mark as vaccinated"}
+                      </Button>
+                      {selected.vaccinated ? <Button variant="ghost" disabled={savingVaccination} onClick={() => void saveVaccination(selected, null)}>Mark as not vaccinated</Button> : null}
+                    </>
+                  )}
                   <Button
                     variant="outline"
                     onClick={() => setSelected(null)}
@@ -700,7 +776,7 @@ const ImpoundedDogs = () => {
         <DialogContent className="max-h-[90vh] overflow-y-auto rounded-xl border-border bg-card sm:max-w-[560px]">
           <DialogHeader>
             <DialogTitle>Log impounded animal</DialogTitle>
-            <DialogDescription>Create an intake record in the Supabase shelter register.</DialogDescription>
+            <DialogDescription>Create an intake record in the shelter register.</DialogDescription>
           </DialogHeader>
           <form onSubmit={logImpound} className="grid grid-cols-2 gap-3">
             <div className="col-span-2 space-y-1.5"><Label htmlFor="intake-name">Animal name</Label><Input id="intake-name" required value={intake.name} onChange={(event) => setIntake((current) => ({ ...current, name: event.target.value }))} /></div>
@@ -710,7 +786,7 @@ const ImpoundedDogs = () => {
             <div className="space-y-1.5"><Label htmlFor="intake-age">Age</Label><Input id="intake-age" required value={intake.age} onChange={(event) => setIntake((current) => ({ ...current, age: event.target.value }))} placeholder="e.g. 2 yrs" /></div>
             <div className="space-y-1.5"><Label htmlFor="intake-color">Color</Label><Input id="intake-color" required value={intake.color} onChange={(event) => setIntake((current) => ({ ...current, color: event.target.value }))} /></div>
             <div className="space-y-1.5"><Label htmlFor="intake-date">Date impounded</Label><Input id="intake-date" type="date" required value={intake.date} onChange={(event) => setIntake((current) => ({ ...current, date: event.target.value }))} /></div>
-            <div className="col-span-2 space-y-1.5"><Label htmlFor="intake-location">Location found</Label><Input id="intake-location" required value={intake.location} onChange={(event) => setIntake((current) => ({ ...current, location: event.target.value }))} placeholder="Barangay or street" /></div>
+            <div className="col-span-2 space-y-1.5"><Label htmlFor="intake-location">Location found</Label><BarangaySelect id="intake-location" required value={intake.location} onValueChange={(location) => setIntake((current) => ({ ...current, location }))} /></div>
             <div className="col-span-2 flex justify-end gap-2 pt-2"><Button type="button" variant="outline" onClick={() => setIntakeOpen(false)}>Cancel</Button><Button type="submit" disabled={savingIntake}><Plus className="size-4" />{savingIntake ? "Saving…" : "Save intake"}</Button></div>
           </form>
         </DialogContent>

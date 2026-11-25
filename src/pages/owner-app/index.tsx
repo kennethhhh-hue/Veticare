@@ -8,6 +8,7 @@ import { PetsScreen } from "@/pages/owner-app/pets-screen";
 import { AdoptScreen } from "@/pages/owner-app/adopt-screen";
 import { ProfileScreen } from "@/pages/owner-app/profile-screen";
 import { PetDetail } from "@/pages/owner-app/pet-detail";
+import { PetProfileEdit } from "@/pages/owner-app/pet-profile-edit";
 import { PetIdScreen } from "@/pages/owner-app/pet-id-screen";
 import { PetRegistrationScreen } from "@/pages/owner-app/pet-registration-screen";
 import { NotificationsScreen, type OwnerNotification } from "@/pages/owner-app/notifications-screen";
@@ -15,16 +16,15 @@ import type { AppTab } from "@/pages/owner-app/app-tab";
 import type { AdoptablePet, OwnerPet, OwnerRequestInput } from "@/data/owner-app";
 import { useAuth } from "@/integrations/supabase/auth-context";
 import { supabase } from "@/integrations/supabase/client";
-import { formatCalendarDate, getPhilippineDateKey } from "@/lib/philippine-date";
-import type { Tables } from "@/integrations/supabase/types";
+import { formatCalendarDate } from "@/lib/philippine-date";
 import {
-  readOwnerRequests,
   writeOwnerProfile,
   type AdoptionRequest,
   type OwnerProfile,
-  type OwnerRequest,
 } from "@/lib/owner-preview-store";
 import { PullToRefresh } from "@/components/veticare/pull-to-refresh";
+import { Button } from "@/components/ui/button";
+import { useOwnerSessionTimeout } from "@/hooks/use-owner-session-timeout";
 
 const tabs = [
   { key: "home", label: "Home", icon: Home },
@@ -37,22 +37,10 @@ const tabs = [
 const isTab = (value: string | null): value is AppTab =>
   value === "home" || value === "pets" || value === "adopt" || value === "notifications" || value === "profile";
 
-function mapServiceRequest(row: Tables<"owner_service_requests">, petName: string): OwnerRequest {
-  return {
-    id: row.id,
-    type: row.request_type,
-    petId: row.pet_record_id,
-    petName,
-    submittedAt: row.created_at,
-    details: [row.preferred_date ? `Preferred date ${formatCalendarDate(row.preferred_date)}` : "", row.details]
-      .filter(Boolean).join(" · "),
-    status: row.status,
-  };
-}
-
 const OwnerApp = () => {
   const navigate = useNavigate();
   const { session } = useAuth();
+  const idleSession = useOwnerSessionTimeout(session?.user.id, session?.user.last_sign_in_at);
   const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState<AppTab>(() => {
     const initial = searchParams.get("tab");
@@ -60,6 +48,7 @@ const OwnerApp = () => {
   });
   const [openPet, setOpenPet] = useState<OwnerPet | null>(null);
   const [idPet, setIdPet] = useState<OwnerPet | null>(null);
+  const [editingPet, setEditingPet] = useState<OwnerPet | null>(null);
   const [pets, setPets] = useState<OwnerPet[]>([]);
   const [petsLoading, setPetsLoading] = useState(true);
   const [notifications, setNotifications] = useState<OwnerNotification[]>([]);
@@ -75,35 +64,27 @@ const OwnerApp = () => {
     avatarUrl: String(session?.user.user_metadata.avatar_url ?? ""),
   }));
   const [adoptionRequests, setAdoptionRequests] = useState<AdoptionRequest[]>([]);
-  const [ownerRequests, setOwnerRequests] = useState<OwnerRequest[]>([]);
-  const [ownerRequestsUnavailable, setOwnerRequestsUnavailable] = useState(false);
-  const [legacyRequests] = useState(readOwnerRequests);
-  const requestsVersion = useRef(0);
+  const ownerRecordsVersion = useRef(0);
   const [registeringPet, setRegisteringPet] = useState(false);
 
   const loadOwnerRecords = useCallback(async () => {
-    const version = ++requestsVersion.current;
+    const version = ++ownerRecordsVersion.current;
     setPetsLoading(true);
     const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (version !== ownerRecordsVersion.current) return;
     if (userError || !userData.user) {
       toast.error("Please sign in again to load your pet records.");
       setPetsLoading(false);
       return;
     }
 
-    const [{ data: petRows, error: petsError }, { data: profileRow, error: profileError }, { data: notificationRows, error: notificationsError }, vaccinationResult, requestResult] = await Promise.all([
+    const [{ data: petRows, error: petsError }, { data: profileRow, error: profileError }, { data: notificationRows, error: notificationsError }, vaccinationResult] = await Promise.all([
       supabase.from("pets").select("*").eq("owner_id", userData.user.id).order("created_at", { ascending: false }),
       supabase.from("profiles").select("full_name, email, phone, address, barangay").eq("id", userData.user.id).maybeSingle(),
       supabase.from("notifications").select("*").eq("recipient_id", userData.user.id).order("created_at", { ascending: false }),
       supabase.from("pet_vaccinations").select("pet_record_id, vaccine_name, administered_on").order("administered_on", { ascending: false }),
-      supabase.from("owner_service_requests").select("*, pets(name)").eq("owner_id", userData.user.id).order("created_at", { ascending: false }),
     ]);
-    if (version === requestsVersion.current) {
-      setOwnerRequestsUnavailable(Boolean(requestResult.error));
-      if (!requestResult.error) {
-        setOwnerRequests((requestResult.data ?? []).map((request) => mapServiceRequest(request, request.pets?.name ?? "Pet")));
-      }
-    }
+    if (version !== ownerRecordsVersion.current) return;
 
     if (profileError) toast.error(profileError.message);
     if (notificationsError) toast.error(notificationsError.message);
@@ -142,6 +123,7 @@ const OwnerApp = () => {
       photoUrl: pet.photo_url ?? undefined,
       petId: pet.pet_id || "Pending review",
       qrCode: pet.qr_code,
+      validThrough: pet.pet_id_valid_through,
       registered: pet.status === "approved" ? new Date(pet.created_at).toLocaleDateString(undefined, { month: "short", year: "numeric" }) : "Pending review",
       registrationStatus: pet.status as "pending" | "approved" | "rejected",
       tags: [pet.status === "approved" ? "Registered" : pet.status === "rejected" ? "Needs update" : "Pending review"],
@@ -153,14 +135,13 @@ const OwnerApp = () => {
   }, []);
 
   const submitOwnerRequest = async (request: OwnerRequestInput) => {
-    const { data, error } = await supabase.from("owner_service_requests")
+    const { error } = await supabase.from("owner_service_requests")
       .insert({
         pet_record_id: request.petId,
         request_type: request.type,
         preferred_date: request.preferredDate || null,
         details: request.details ?? "",
-      })
-      .select("*").single();
+      });
     if (error) {
       const message = error.code === "23505" ? "An identical request is already waiting for review."
         : error.code === "PGRST205" ? "The owner request service is not available yet."
@@ -168,10 +149,6 @@ const OwnerApp = () => {
       toast.error(message);
       return false;
     }
-    requestsVersion.current++;
-    setOwnerRequestsUnavailable(false);
-    const petName = pets.find((pet) => pet.id === request.petId)?.name ?? "Pet";
-    setOwnerRequests((current) => [mapServiceRequest(data, petName), ...current.filter((item) => item.id !== data.id)]);
     return true;
   };
 
@@ -192,7 +169,7 @@ const OwnerApp = () => {
     }
 
     const [animalsResult, applicationsResult] = await Promise.all([
-      supabase.from("adoptable_animals").select("id, impound_id, animal_type, name, breed, sex, age, color, area").order("name"),
+      supabase.from("adoptable_animals").select("id, impound_id, animal_type, name, breed, sex, age, color, area, photo_url, vaccine_name").order("name"),
       supabase.from("adoption_applications").select("id, application_id, impound_record_id, application_date, created_at, status, pet_name").eq("applicant_id", userData.user.id).order("created_at", { ascending: false }),
     ]);
     const error = animalsResult.error ?? applicationsResult.error;
@@ -212,6 +189,8 @@ const OwnerApp = () => {
       shelter: `OCVAS • ${animal.area}`,
       distance: "Available for adoption",
       tags: [animal.color].filter(Boolean),
+      photoUrl: animal.photo_url ?? undefined,
+      vaccineName: animal.vaccine_name ?? undefined,
     })));
     setAdoptionRequests((applicationsResult.data ?? []).map((application) => ({
       id: application.application_id,
@@ -230,22 +209,10 @@ const OwnerApp = () => {
   }, [loadOwnerAdoptions]);
 
   const submitOwnerAdoption = async (pet: AdoptablePet): Promise<boolean> => {
-    const { data, error: userError } = await supabase.auth.getUser();
-    if (userError || !data.user) {
-      toast.error("Please sign in again before applying to adopt.");
-      return false;
-    }
-
-    const { error } = await supabase.from("adoption_applications").insert({
-      application_id: `AD-${Date.now().toString().slice(-8)}`,
-      applicant_id: data.user.id,
-      impound_record_id: pet.id,
-      application_date: getPhilippineDateKey(),
-      home_visit_status: "pending",
-      note: "",
-    });
+    const { error } = await supabase.rpc("submit_owner_adoption", { p_impound_id: pet.id });
     if (error) {
-      toast.error(error.message);
+      toast.error(error.code === "23505" ? "This animal is no longer available for adoption." : error.message);
+      await loadOwnerAdoptions();
       return false;
     }
     await loadOwnerAdoptions();
@@ -297,6 +264,29 @@ const OwnerApp = () => {
     setSearchParams(next === "home" ? {} : { tab: next }, { replace: true });
   };
 
+  const updatePet = (id: string, changes: Partial<OwnerPet>) => {
+    const update = (pet: OwnerPet) => pet.id === id ? { ...pet, ...changes } : pet;
+    ownerRecordsVersion.current += 1;
+    setPetsLoading(false);
+    setPets((current) => current.map(update));
+    setOpenPet((current) => current ? update(current) : null);
+    setIdPet((current) => current ? update(current) : null);
+  };
+
+  if (idleSession.expired) {
+    return (
+      <main className="grid min-h-dvh place-items-center px-5 text-center">
+        <div className="space-y-3 rounded-xl border border-border bg-card p-6">
+          <h1 className="text-lg font-bold">Login expired</h1>
+          <p role="status" className="text-sm text-muted-foreground">Your session ended after 15 minutes of inactivity.</p>
+          {idleSession.logoutError ? (
+            <Button type="button" onClick={idleSession.retry} disabled={idleSession.signingOut}>Continue to sign in</Button>
+          ) : <p className="text-xs text-muted-foreground">Signing out…</p>}
+        </div>
+      </main>
+    );
+  }
+
   return (
     <div className="mobile-app-viewport relative flex flex-col items-center justify-center bg-background sm:px-6 sm:py-6">
       <div
@@ -329,11 +319,8 @@ const OwnerApp = () => {
                   pet={pets.find((pet) => pet.id === openPet.id) ?? openPet}
                   onBack={() => setOpenPet(null)}
                   onShowId={(pet) => setIdPet(pet)}
-                  onPhotoUpdated={(petId, photoUrl) => {
-                    setPets((current) => current.map((pet) => pet.id === petId ? { ...pet, photoUrl } : pet));
-                    setOpenPet((current) => current?.id === petId ? { ...current, photoUrl } : current);
-                    setIdPet((current) => current?.id === petId ? { ...current, photoUrl } : current);
-                  }}
+                  onEdit={() => setEditingPet(pets.find((pet) => pet.id === openPet.id) ?? openPet)}
+                  onPhotoUpdated={(petId, photoUrl) => updatePet(petId, { photoUrl })}
                   onRequest={submitOwnerRequest}
                 />
               ) : (
@@ -360,6 +347,7 @@ const OwnerApp = () => {
                       loading={petsLoading}
                       onAddPet={() => setRegisteringPet(true)}
                       onOpenPet={(pet) => setOpenPet(pet)}
+                      onEditPet={setEditingPet}
                     />
                   ) : null}
                   {tab === "adopt" ? (
@@ -391,14 +379,6 @@ const OwnerApp = () => {
                     <ProfileScreen
                       profile={profile}
                       petCount={pets.length}
-                      adoptionCount={adoptionRequests.length}
-                      requests={[
-                        ...ownerRequests,
-                        ...(Array.isArray(legacyRequests) ? legacyRequests : [])
-                          .filter((request) => pets.some((pet) => pet.id === request?.petId))
-                          .map((request) => ({ ...request, localOnly: true })),
-                      ]}
-                      requestsUnavailable={ownerRequestsUnavailable}
                       onPhotoUpdated={(avatarUrl) => setProfile((current) => ({ ...current, avatarUrl }))}
                       onSave={async (nextProfile) => {
                         const { data: userData, error: userError } = await supabase.auth.getUser();
@@ -478,6 +458,12 @@ const OwnerApp = () => {
           </button>
         </p>
       </div>
+      {editingPet ? (
+        <PetProfileEdit key={editingPet.id} pet={editingPet} onClose={() => setEditingPet(null)} onSaved={(changes) => {
+          updatePet(editingPet.id, changes);
+          setEditingPet(null);
+        }} />
+      ) : null}
     </div>
   );
 };

@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { gmailInviteSender, mailboxPattern } from "./gmail-invite.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -7,7 +8,7 @@ const corsHeaders = {
 };
 
 type ManagedRole = "admin" | "personnel" | "owner";
-type Action = "list" | "invite" | "update" | "remove" | "reset-owner-password" | "delete-owner-account" | "get-owner-photo" | "change-owner-photo";
+type Action = "list" | "invite" | "invite-via-gmail" | "reset-owner-password" | "delete-owner-account" | "get-owner-photo" | "change-owner-photo";
 
 const photoBucket = "veticare-profile-photos";
 const maxPhotoBytes = 5 * 1024 * 1024;
@@ -113,30 +114,71 @@ Deno.serve(async (request) => {
     }) });
   }
 
-  if (action === "invite") {
+  if (action === "invite" || action === "invite-via-gmail") {
     const email = String(payload.email ?? "").trim().toLowerCase();
     const fullName = String(payload.fullName ?? "").trim();
     const role = payload.role as ManagedRole;
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return json({ error: "Enter a valid email address." }, 400);
+    if (!mailboxPattern.test(email)) return json({ error: "Enter a valid email address." }, 400);
     if (!["admin", "personnel", "owner"].includes(role)) return json({ error: "Invalid role." }, 400);
 
-    const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
-      data: { full_name: fullName, role },
-      ...(Deno.env.get("APP_SITE_URL") ? { redirectTo: `${Deno.env.get("APP_SITE_URL")}/login` } : {}),
+    if (action === "invite") {
+      const siteUrl = Deno.env.get("APP_SITE_URL");
+      const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
+        data: { full_name: fullName, role },
+        ...(siteUrl ? { redirectTo: `${siteUrl}/login` } : {}),
+      });
+      if (error) return json({ error: error.message }, 400);
+      const { error: profileError } = await admin.from("profiles").upsert({
+        id: data.user.id, email, full_name: fullName, role, approval_status: "approved", is_active: true,
+      });
+      if (profileError) return json({ error: profileError.message }, 500);
+      return json({ success: true });
+    }
+
+    let sendInvitation: Awaited<ReturnType<typeof gmailInviteSender>>;
+    try {
+      sendInvitation = await gmailInviteSender();
+    } catch (error) {
+      return json({ error: error instanceof Error ? error.message : "Gmail is unavailable." }, 503);
+    }
+
+    const nonce = crypto.randomUUID();
+    const { data, error } = await admin.auth.admin.generateLink({
+      type: "invite", email, options: { data: { full_name: fullName, veticare_invite_nonce: nonce } },
     });
     if (error) return json({ error: error.message }, 400);
+    const tokenHash = data.properties?.hashed_token;
+    if (!tokenHash) return json({ error: "Unable to create the invitation link." }, 500);
+    let inviteUrl: URL;
+    try {
+      inviteUrl = new URL("/login/accept-invite", Deno.env.get("APP_SITE_URL")?.trim() || data.properties.redirect_to);
+      if (inviteUrl.protocol !== "https:") throw new Error();
+    } catch {
+      return json({ error: "The site address for invitation links is not configured." }, 503);
+    }
+    if (data.user.user_metadata.veticare_invite_nonce !== nonce && data.user.app_metadata.veticare_invite_role !== role) {
+      return json({ error: "This email already has an account or a different pending invitation." }, 409);
+    }
+    const { error: inviteMetadataError } = await admin.auth.admin.updateUserById(data.user.id, {
+      app_metadata: { veticare_invite_role: role },
+      user_metadata: { veticare_invite_nonce: null },
+    });
+    if (inviteMetadataError) return json({ error: inviteMetadataError.message }, 500);
 
     const { error: updateError } = await admin.from("profiles").upsert({
       id: data.user.id,
       email,
       full_name: fullName,
       role,
-      approval_status: role === "owner" ? "pending" : "approved",
+      approval_status: "approved",
       is_active: true,
     });
-    if (updateError) {
-      await admin.auth.admin.deleteUser(data.user.id);
-      return json({ error: updateError.message }, 500);
+    if (updateError) return json({ error: updateError.message }, 500);
+    inviteUrl.hash = new URLSearchParams({ invite: tokenHash }).toString();
+    try {
+      await sendInvitation(email, role, inviteUrl.href);
+    } catch (error) {
+      return json({ error: error instanceof Error ? error.message : "Gmail delivery could not be confirmed." }, 502);
     }
     return json({ success: true });
   }
@@ -225,45 +267,6 @@ Deno.serve(async (request) => {
   }
 
   if (target.account_deleted_at) return json({ error: "This account was deleted." }, 409);
-
-  if (action === "update") {
-    const role = payload.role as ManagedRole;
-    const isActive = payload.isActive;
-    if (!["admin", "personnel", "owner"].includes(role)) return json({ error: "Invalid role." }, 400);
-    if (typeof isActive !== "boolean") return json({ error: "An access status is required." }, 400);
-    if (target.role === "admin" && (role !== "admin" || !isActive)) {
-      const { count, error } = await admin.from("profiles").select("id", { count: "exact", head: true }).eq("role", "admin").eq("is_active", true);
-      if (error) return json({ error: error.message }, 500);
-      if ((count ?? 0) <= 1) return json({ error: "The last active admin cannot be demoted or deactivated." }, 400);
-    }
-
-    const { error } = await admin.from("profiles").update({
-      role,
-      is_active: isActive,
-      ...(role === "owner"
-        ? target.role === "owner" ? {} : { approval_status: "pending" }
-        : { approval_status: "approved" }),
-    }).eq("id", userId);
-    if (error) return json({ error: error.message }, 500);
-    const { error: authError } = await admin.auth.admin.updateUserById(userId, {
-      ban_duration: isActive ? "none" : "876000h",
-    });
-    if (authError) return json({ error: authError.message }, 500);
-    return json({ success: true });
-  }
-
-  if (action === "remove") {
-    if (target.role === "admin") {
-      const { count, error } = await admin.from("profiles").select("id", { count: "exact", head: true }).eq("role", "admin").eq("is_active", true);
-      if (error) return json({ error: error.message }, 500);
-      if ((count ?? 0) <= 1) return json({ error: "The last active admin cannot be removed." }, 400);
-    }
-    const { error: profileUpdateError } = await admin.from("profiles").update({ is_active: false }).eq("id", userId);
-    if (profileUpdateError) return json({ error: profileUpdateError.message }, 500);
-    const { error } = await admin.auth.admin.updateUserById(userId, { ban_duration: "876000h" });
-    if (error) return json({ error: error.message }, 500);
-    return json({ success: true });
-  }
 
   return json({ error: "Unknown action." }, 400);
 });

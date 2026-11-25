@@ -502,7 +502,7 @@ export function AppShell({
             <div className="space-y-1.5">
               <Label htmlFor="account-email">Email</Label>
               <Input id="account-email" type="email" value={displayEmail} readOnly aria-readonly="true" />
-              <p className="text-[9.5px] text-muted-foreground">Email changes require a separate Supabase verification flow.</p>
+              <p className="text-[9.5px] text-muted-foreground">Email changes require verification.</p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="account-phone">Phone</Label>
