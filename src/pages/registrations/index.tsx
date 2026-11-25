@@ -123,7 +123,6 @@ const Registrations = () => {
   }, [loadRegistry]);
 
   const pendingCount = rows.filter((row) => row.status === "pending").length;
-  const draftCount = rows.filter((row) => row.isDraft).length;
 
   const filtered = useMemo(() => {
     const search = query.trim().toLowerCase();
@@ -312,32 +311,13 @@ const Registrations = () => {
         title="Pet Registration"
         description="Review owner submissions and issue Pet IDs with QR codes."
         actions={
-          <>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setDraftsOnly((value) => !value);
-                setStatus("all");
-                setPage(1);
-              }}
-              className={cn(
-                "h-9 rounded-xl border-border bg-card text-[12px] font-bold",
-                draftsOnly && "border-primary/30 bg-primary-soft text-primary",
-              )}
-            >
-              Drafts
-              <span className="num rounded-full bg-secondary px-1.5 text-[10px] font-bold text-muted-foreground">
-                {draftCount}
-              </span>
-            </Button>
-            <Button
-              onClick={() => setAddPetOpen(true)}
-              className="h-9 rounded-xl px-3.5 text-[12px] font-bold shadow-glow"
-            >
-              <PawPrint className="size-4" />
-              Add New Pet
-            </Button>
-          </>
+          <Button
+            onClick={() => setAddPetOpen(true)}
+            className="h-9 rounded-xl px-3.5 text-[12px] font-bold shadow-glow"
+          >
+            <PawPrint className="size-4" />
+            Add New Pet
+          </Button>
         }
       />
 

@@ -1,9 +1,9 @@
 import { QRCodeSVG } from "qrcode.react";
 import { PetVaccinationRecords } from "@/components/admin/pet-vaccination-records";
 import { StatusPill } from "@/components/admin/status-pill";
-import { PetPhoto } from "@/components/owner-app/pet-photo";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ImpoundClaimBadge } from "@/components/veticare/impound-claim-badge";
+import { PetPhotoPreview } from "@/components/veticare/pet-photo-preview";
 import type { PetRegistration } from "@/data/admin-records";
 
 type PetProfile = Pick<
@@ -18,28 +18,7 @@ export function PetProfileDetails({ pet }: { pet: PetProfile }) {
   return (
     <>
       <div className="flex items-center gap-3">
-        <div className="relative shrink-0">
-          <PetPhoto src={photoUrl} alt={pet.name} species={pet.species} className="size-20 rounded-xl" />
-          {photoUrl ? (
-            <Dialog>
-              <DialogTrigger asChild>
-                <button type="button" aria-label={`Enlarge ${pet.name}'s photo`} className="absolute inset-0 cursor-zoom-in rounded-xl hover:ring-2 hover:ring-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
-              </DialogTrigger>
-              <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-[560px] overflow-y-auto rounded-xl border-border bg-card">
-                <DialogHeader className="pr-6 text-left">
-                  <DialogTitle>{pet.name}'s photo</DialogTitle>
-                  <DialogDescription>Full-size pet photo preview.</DialogDescription>
-                </DialogHeader>
-                <PetPhoto
-                  src={photoUrl}
-                  alt={pet.name}
-                  species={pet.species}
-                  className="min-h-24 w-full rounded-xl [&_img]:h-auto [&_img]:max-h-[70dvh] [&_img]:object-contain"
-                />
-              </DialogContent>
-            </Dialog>
-          ) : null}
-        </div>
+        <PetPhotoPreview src={photoUrl} name={pet.name} species={pet.species} className="size-20" />
         <div className="min-w-0">
           <p className="truncate text-lg font-bold text-foreground">{pet.name}</p>
           <p className="text-xs text-muted-foreground">{pet.breed} · {pet.species} · {pet.gender}</p>

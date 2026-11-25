@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Clock,
@@ -18,8 +18,8 @@ import { FilterSelect } from "@/components/admin/filter-select";
 import { Pagination } from "@/components/admin/pagination";
 import { PersonnelImpoundReports } from "@/components/admin/personnel-impound-reports";
 import { ImpoundClaimForm } from "@/components/admin/impound-claim-form";
-import { PetPhoto } from "@/components/owner-app/pet-photo";
 import { PetPhotoPicker } from "@/components/veticare/pet-photo-picker";
+import { PetPhotoPreview } from "@/components/veticare/pet-photo-preview";
 import { ImpoundClaimBadge } from "@/components/veticare/impound-claim-badge";
 import {
   AlertDialog,
@@ -43,7 +43,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { getPetPhotoError, petPhotoTypes } from "@/lib/pet-photo";
 import {
   type ImpoundedDog,
   type ImpoundStatus,
@@ -71,13 +70,6 @@ const getAdoptionLabel = (dog: ImpoundedDog) =>
   dog.impoundStatus === "claimed" || (dog.adoptionStatus === "available" && dog.impoundStatus !== "impounded")
     ? adoptionLabel.not_available
     : adoptionLabel[dog.adoptionStatus];
-
-const initials = (name: string) =>
-  name
-    .split(" ")
-    .map((part) => part[0])
-    .slice(0, 2)
-    .join("");
 
 const mapImpoundRow = (row: {
   id: string;
@@ -126,7 +118,7 @@ const mapImpoundRow = (row: {
     impoundStatus: row.impound_status as ImpoundedDog["impoundStatus"],
     claimedPetRecordId: row.claimed_pet_record_id ?? undefined,
     adoptionStatus: row.adoption_status as ImpoundedDog["adoptionStatus"],
-    photoUrl: row.photo_url ?? undefined,
+    photoUrl: row.photo_url?.trim() || undefined,
     status: row.status as ImpoundStatus,
     days,
     vaccinated: row.vaccinated,
@@ -139,6 +131,11 @@ const ImpoundedDogs = () => {
   const queryClient = useQueryClient();
   const { session } = useAuth();
   const [rows, setRows] = useState<ImpoundedDog[]>([]);
+  const [linkedPhotos, setLinkedPhotos] = useState(() => ({
+    byRecordId: new Map<string, string>(),
+    byPetId: new Map<string, string>(),
+  }));
+  const loadVersion = useRef(0);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -152,7 +149,7 @@ const ImpoundedDogs = () => {
   const [claimOpen, setClaimOpen] = useState(false);
   const [savingClaim, setSavingClaim] = useState(false);
   const [claimedProfile, setClaimedProfile] = useState<{ impoundId: string; name: string; owner: string } | null>(null);
-  const photoInput = useRef<HTMLInputElement>(null);
+  const [detailPhoto, setDetailPhoto] = useState<File | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [vaccineName, setVaccineName] = useState<string | null>(null);
   const [savingVaccination, setSavingVaccination] = useState(false);
@@ -164,17 +161,48 @@ const ImpoundedDogs = () => {
   const [intake, setIntake] = useState({ name: "", type: "Dog" as "Dog" | "Cat", breed: "", sex: "Male" as "Male" | "Female", age: "", color: "", date: new Date().toISOString().slice(0, 10), location: "" });
 
   const loadImpounds = useCallback(async () => {
+    const version = ++loadVersion.current;
     setLoading(true);
     setLoadError(null);
     const { data, error } = await supabase.from("impounds").select("*").order("created_at", { ascending: false });
+    if (version !== loadVersion.current) return;
     if (error) {
       setLoadError(error.message);
       setLoading(false);
       return;
     }
-    setRows((data ?? []).map(mapImpoundRow));
+    const records = (data ?? []).map(mapImpoundRow);
+    setRows(records);
+    setSelected((current) => current ? records.find((record) => record.id === current.id) ?? current : current);
     setLoading(false);
+
+    const missingPhotos = records.filter((record) => !record.photoUrl);
+    const recordIds = missingPhotos.flatMap((record) => record.claimedPetRecordId ? [record.claimedPetRecordId] : []);
+    const petIds = missingPhotos.filter((record) => !record.claimedPetRecordId).map((record) => record.petId);
+    const photoLookups = ([["id", recordIds], ["pet_id", petIds]] as const).flatMap(([column, ids]) => {
+      const uniqueIds = [...new Set(ids)];
+      const batches = Array.from({ length: Math.ceil(uniqueIds.length / 100) }, (_, index) => uniqueIds.slice(index * 100, (index + 1) * 100));
+      return batches.map((batch) => supabase.from("pets").select("id, pet_id, photo_url").in(column, batch).not("photo_url", "is", null));
+    });
+    const results = await Promise.all(photoLookups);
+    if (version !== loadVersion.current || results.some((result) => result.error)) return;
+
+    const byRecordId = new Map<string, string>();
+    const byPetId = new Map<string, string>();
+    for (const result of results) {
+      for (const pet of result.data ?? []) {
+        const photoUrl = pet.photo_url?.trim();
+        if (!photoUrl) continue;
+        byRecordId.set(pet.id, photoUrl);
+        if (pet.pet_id) byPetId.set(pet.pet_id, photoUrl);
+      }
+    }
+    setLinkedPhotos({ byRecordId, byPetId });
   }, []);
+
+  const getPhotoUrl = (dog: ImpoundedDog) => dog.photoUrl ?? (dog.claimedPetRecordId
+    ? linkedPhotos.byRecordId.get(dog.claimedPetRecordId)
+    : linkedPhotos.byPetId.get(dog.petId));
 
   useEffect(() => {
     void loadImpounds();
@@ -200,7 +228,10 @@ const ImpoundedDogs = () => {
   const filtered = useMemo(() => {
     const search = query.trim().toLowerCase();
     return [...rows]
-      .sort((a, b) => b.days - a.days)
+      .sort((a, b) => {
+        const adoptedOrder = Number(a.adoptionStatus === "adopted") - Number(b.adoptionStatus === "adopted");
+        return adoptedOrder || b.days - a.days;
+      })
       .filter((dog) => {
         const matchesQuery =
           search.length === 0 ||
@@ -259,13 +290,15 @@ const ImpoundedDogs = () => {
     setRows((current) => current.map((item) => item.id === record.id ? record : item));
     setSelected((current) => current?.id === record.id ? record : current);
     setClaimOpen(false);
+    if (!record.photoUrl) void loadImpounds();
     void queryClient.invalidateQueries({ queryKey: sidebarCountKeys.impounded });
     toast.success(`${record.name} was marked Impound Claimed.`);
   };
 
   const closeImpoundDetails = () => {
-    if (savingVaccination || savingClaim) return;
+    if (savingVaccination || savingClaim || uploadingPhoto) return;
     setSelected(null);
+    setDetailPhoto(null);
     setVaccineName(null);
     setClaimOpen(false);
   };
@@ -388,15 +421,10 @@ const ImpoundedDogs = () => {
     toast.success(`${dog.name}: vaccination marked ${vaccinated ? "up to date" : "not vaccinated"}.`);
   };
 
-  const changePhoto = async (event: ChangeEvent<HTMLInputElement>) => {
-    const photo = event.currentTarget.files?.[0];
-    event.currentTarget.value = "";
-    if (!photo || !selected || uploadingPhoto) return;
-    const validationError = getPetPhotoError(photo);
-    if (validationError) {
-      toast.error(validationError);
-      return;
-    }
+  const saveImpoundPhoto = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!detailPhoto || !selected || uploadingPhoto) return;
+    const photo = detailPhoto;
     const userId = session?.user.id;
     if (!userId) {
       toast.error("Sign in again to update this photo.");
@@ -408,7 +436,7 @@ const ImpoundedDogs = () => {
     setUploadingPhoto(true);
     try {
       const { error: uploadError } = await photoStorage.upload(path, photo, { contentType: photo.type });
-      if (uploadError) throw uploadError;
+      if (uploadError) throw new Error(uploadError.message);
       const photoUrl = photoStorage.getPublicUrl(path).data.publicUrl;
       const { data, error } = await supabase.from("impounds").update({ photo_url: photoUrl })
         .eq("id", id).select("photo_url").maybeSingle();
@@ -421,6 +449,8 @@ const ImpoundedDogs = () => {
       }
       setRows((current) => current.map((dog) => dog.id === id ? { ...dog, photoUrl } : dog));
       setSelected((current) => current?.id === id ? { ...current, photoUrl } : current);
+      setDetailPhoto(null);
+      void loadImpounds();
       toast.success("Impound photo updated.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to update the impound photo.");
@@ -430,6 +460,7 @@ const ImpoundedDogs = () => {
   };
 
   const animalsInCare = rows.filter((dog) => dog.impoundStatus === "impounded");
+  const selectedPhotoUrl = selected ? getPhotoUrl(selected) : undefined;
   const metrics = [
     {
       label: "Animals in care",
@@ -633,9 +664,9 @@ const ImpoundedDogs = () => {
                 className="grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2.5 px-3.5 py-3.5 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary sm:px-4 xl:grid-cols-[minmax(0,1.5fr)_88px_80px_minmax(0,0.9fr)_100px_100px_140px] xl:gap-4 xl:px-5"
               >
                 <div className="order-1 flex min-w-0 items-center gap-2.5 xl:order-none">
-                  <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-warning/12 text-[11px] font-bold text-warning">
-                    {initials(dog.name)}
-                  </span>
+                  <div onClick={(event) => { if (getPhotoUrl(dog)) event.stopPropagation(); }}>
+                    <PetPhotoPreview src={getPhotoUrl(dog)} name={dog.name} species={dog.animalType} className="size-11 rounded-lg" />
+                  </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
                       <p className="truncate text-[12.5px] font-bold text-foreground">{dog.name}</p>
@@ -758,9 +789,6 @@ const ImpoundedDogs = () => {
             <>
               <DialogHeader className="pr-6 text-left">
                 <div className="flex items-center gap-3">
-                  <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-warning/12 text-[12px] font-bold text-warning">
-                    {initials(selected.name)}
-                  </span>
                   <div className="min-w-0">
                     <DialogTitle className="truncate text-[16px] font-extrabold tracking-[-0.02em]">
                       {selected.name}
@@ -773,13 +801,21 @@ const ImpoundedDogs = () => {
               </DialogHeader>
 
               <div className="space-y-3">
-                <div className="space-y-2">
-                  {selected.photoUrl ? <PetPhoto src={selected.photoUrl} alt={selected.name} species={selected.animalType} className="h-32 rounded-xl" /> : null}
-                  <Button type="button" size="sm" variant="outline" disabled={uploadingPhoto} onClick={() => photoInput.current?.click()}>
-                    {uploadingPhoto ? "Uploading…" : selected.photoUrl ? "Change adoption photo" : "Add adoption photo"}
-                  </Button>
-                  <input ref={photoInput} type="file" accept={petPhotoTypes.join(",")} onChange={(event) => void changePhoto(event)} hidden />
-                </div>
+                <form className="space-y-2" onSubmit={saveImpoundPhoto} aria-busy={uploadingPhoto}>
+                  <PetPhotoPicker
+                    key={selected.id}
+                    photo={detailPhoto}
+                    onPhotoChange={setDetailPhoto}
+                    savedPhoto={selectedPhotoUrl ? { url: selectedPhotoUrl, name: selected.name, species: selected.animalType } : undefined}
+                    disabled={uploadingPhoto}
+                  />
+                  {detailPhoto ? (
+                    <div className="flex justify-end gap-2">
+                      <Button type="button" size="sm" variant="outline" disabled={uploadingPhoto} onClick={() => setDetailPhoto(null)}>Cancel</Button>
+                      <Button type="submit" size="sm" disabled={uploadingPhoto}>{uploadingPhoto ? "Saving…" : "Save photo"}</Button>
+                    </div>
+                  ) : null}
+                </form>
                 <div className="flex items-center gap-2">
                   <span className="num rounded-full bg-secondary px-2 py-1 text-[10px] font-semibold text-secondary-foreground">
                     {selected.impoundStatus === "impounded" ? `${selected.days} days in care` : "Intake closed"}
@@ -860,7 +896,7 @@ const ImpoundedDogs = () => {
                   )}
                   <Button
                     variant="outline"
-                    disabled={savingClaim || savingVaccination}
+                    disabled={savingClaim || savingVaccination || uploadingPhoto}
                     onClick={closeImpoundDetails}
                     className="h-10 w-full rounded-xl border-border text-[12px] font-semibold"
                   >
