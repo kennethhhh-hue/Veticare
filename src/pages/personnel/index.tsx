@@ -75,6 +75,7 @@ const PersonnelApp = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [scans, setScans] = useState<ScanEntry[]>([]);
   const [scanRegistry, setScanRegistry] = useState<PersonnelPet[]>([]);
+  const [registryStatus, setRegistryStatus] = useState<"loading" | "ready" | "error">("loading");
   const [verifications, setVerifications] = useState<Tables<"personnel_verifications">[]>([]);
   const [reviewFlags, setReviewFlags] = useState<ReviewFlag[]>([]);
   const [activityError, setActivityError] = useState<string | null>(null);
@@ -242,6 +243,7 @@ const PersonnelApp = () => {
     if (petsError) {
       console.error("Unable to load issued pet identifiers:", petsError.message);
       setScanRegistry([]);
+      setRegistryStatus("error");
       return;
     }
 
@@ -253,6 +255,7 @@ const PersonnelApp = () => {
     if (profilesError) {
       console.error("Unable to load owner contact details:", profilesError.message);
       setScanRegistry([]);
+      setRegistryStatus("error");
       return;
     }
 
@@ -289,6 +292,7 @@ const PersonnelApp = () => {
       };
     });
     setScanRegistry(issuedPets);
+    setRegistryStatus("ready");
   }, []);
 
   useEffect(() => {
@@ -463,6 +467,8 @@ const PersonnelApp = () => {
               {tab === "scan" ? (
                 <ScannerScreen
                   pets={scanRegistry}
+                  registryStatus={registryStatus}
+                  onRetryRegistry={() => { setRegistryStatus("loading"); void loadIssuedPets(); }}
                   onRecord={(pet, result, note) => withActivityLock<string | null>("scan", null, () => addScan(pet, result, note))}
                   registrationRequestPetIds={reviewFlags.filter((flag) => flag.request_type === "registration").map((flag) => flag.pet_record_id)}
                   onRequestRegistration={(scanId, petId) => withActivityLock(`flag:${petId}:registration`, false, () => flagPet(petId, scanId, "registration"))}

@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { BrowserQRCodeReader } from "@zxing/browser";
-import { BadgeCheck, Camera, CameraOff, QrCode, ScanLine, TriangleAlert } from "lucide-react";
+import { BadgeCheck, Camera, CameraOff, ImageUp, QrCode, ScanLine, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,14 @@ import {
 
 const MAX_VACCINE_NAME_LENGTH = 120;
 const MIN_CALENDAR_DATE = "0001-01-01";
+const normalizePetId = (value: string) => value.replace(/[\s-]/g, "").toLowerCase();
+
+function findPetByQr(pets: PersonnelPet[], value: string) {
+  const normalized = normalizePetId(value);
+  if (!normalized) return undefined;
+  return pets.find((pet) => normalizePetId(pet.id) === normalized ||
+    (pet.qrCode && normalizePetId(pet.qrCode) === normalized));
+}
 
 function isValidDateThroughToday(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || value < MIN_CALENDAR_DATE || value > getPhilippineDateKey()) {
@@ -46,6 +54,8 @@ const resultNote = (pet: PersonnelPet, result: ScanResult) => {
 
 interface ScannerScreenProps {
   pets: PersonnelPet[];
+  registryStatus: "loading" | "ready" | "error";
+  onRetryRegistry: () => void;
   registrationRequestPetIds: string[];
   onRecord: (pet: PersonnelPet, result: ScanResult, note: string) => Promise<string | null>;
   onRequestRegistration: (scanId: string, petId: string) => Promise<boolean>;
@@ -53,10 +63,12 @@ interface ScannerScreenProps {
   onImpound: (pet: PersonnelPet, locationFound: string, dateImpounded: string) => Promise<boolean>;
 }
 
-export function ScannerScreen({ pets, registrationRequestPetIds, onRecord, onRequestRegistration, onRecordVaccination, onImpound }: ScannerScreenProps) {
+export function ScannerScreen({ pets, registryStatus, onRetryRegistry, registrationRequestPetIds, onRecord, onRequestRegistration, onRecordVaccination, onImpound }: ScannerScreenProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const cameraControlsRef = useRef<{ stop: () => void } | null>(null);
-  const scanCompletedRef = useRef(false);
+  const cameraRunRef = useRef(0);
+  const latestScanData = useRef({ pets, onRecord, registryStatus });
   const submittingRef = useRef(false);
   const savingScanActionRef = useRef(false);
   const impoundSubmittingRef = useRef(false);
@@ -64,6 +76,7 @@ export function ScannerScreen({ pets, registrationRequestPetIds, onRecord, onReq
   const [cameraStarting, setCameraStarting] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [readingImage, setReadingImage] = useState(false);
   const [recording, setRecording] = useState(false);
   const [savingScanAction, setSavingScanAction] = useState(false);
   const [scannedPet, setScannedPet] = useState<PersonnelPet | null>(null);
@@ -83,7 +96,14 @@ export function ScannerScreen({ pets, registrationRequestPetIds, onRecord, onReq
   const [impoundLocation, setImpoundLocation] = useState("");
   const [impoundDate, setImpoundDate] = useState(getPhilippineDateKey);
 
-  useEffect(() => () => cameraControlsRef.current?.stop(), []);
+  useEffect(() => {
+    latestScanData.current = { pets, onRecord, registryStatus };
+  }, [pets, onRecord, registryStatus]);
+
+  useEffect(() => () => {
+    cameraRunRef.current += 1;
+    cameraControlsRef.current?.stop();
+  }, []);
 
   const finishScan = async (nextPet: PersonnelPet) => {
     if (submittingRef.current) return;
@@ -92,7 +112,7 @@ export function ScannerScreen({ pets, registrationRequestPetIds, onRecord, onReq
     const result = deriveResult(nextPet);
     let id: string | null;
     try {
-      id = await onRecord(nextPet, result, resultNote(nextPet, result));
+      id = await latestScanData.current.onRecord(nextPet, result, resultNote(nextPet, result));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to record the scan.");
       id = null;
@@ -125,79 +145,97 @@ export function ScannerScreen({ pets, registrationRequestPetIds, onRecord, onReq
   };
 
   const stopCamera = () => {
+    cameraRunRef.current += 1;
     cameraControlsRef.current?.stop();
     cameraControlsRef.current = null;
     setCameraActive(false);
+    setCameraStarting(false);
   };
 
   const startCamera = async () => {
+    if (!window.isSecureContext) {
+      setCameraError("Live camera needs HTTPS or localhost. Use the HTTPS site, or upload a photo of the pet’s QR code below.");
+      return;
+    }
     if (!navigator.mediaDevices?.getUserMedia) {
-      setCameraError("Camera access needs HTTPS or localhost. Open this app on a secure connection.");
+      setCameraError("This browser cannot open the camera. Upload a photo of the pet’s QR code below.");
       return;
     }
     if (!videoRef.current) return;
 
     setCameraStarting(true);
     setCameraError(null);
-    scanCompletedRef.current = false;
+    const cameraRun = ++cameraRunRef.current;
     try {
       const reader = new BrowserQRCodeReader();
-      const controls = await reader.decodeFromVideoDevice(
-        undefined,
+      const controls = await reader.decodeFromConstraints(
+        { audio: false, video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } } },
         videoRef.current,
         (result, _error, scannerControls) => {
-          if (!result) return;
-          if (scanCompletedRef.current) return;
-          const scannedValue = result.getText().trim();
-          const normalizedValue = scannedValue.replace(/[\s-]/g, "").toLowerCase();
-          const match = pets.find((item) =>
-            [item.id, item.qrCode]
-              .filter((value): value is string => Boolean(value))
-              .some((value) => value.replace(/[\s-]/g, "").toLowerCase() === normalizedValue),
-          );
-
+          if (!result || cameraRunRef.current !== cameraRun || latestScanData.current.registryStatus !== "ready") return;
+          const match = findPetByQr(latestScanData.current.pets, result.getText());
           if (!match) {
-            setCameraError(`QR code read, but no approved pet matches “${scannedValue}”.`);
+            setCameraError("QR was read, but it didn’t match an issued Pet ID.");
             return;
           }
-
-          scanCompletedRef.current = true;
-          scannerControls.stop();
-          cameraControlsRef.current = null;
-          setCameraActive(false);
+          if (!cameraControlsRef.current) scannerControls.stop();
+          stopCamera();
+          setCameraError(null);
           void finishScan(match);
         },
       );
-      if (scanCompletedRef.current) {
+      if (cameraRunRef.current !== cameraRun) {
         controls.stop();
       } else {
         cameraControlsRef.current = controls;
         setCameraActive(true);
       }
     } catch (error) {
+      if (cameraRunRef.current !== cameraRun) return;
       stopCamera();
-      const message = error instanceof Error ? error.message : "Unable to access the camera.";
-      setCameraError(message.toLowerCase().includes("permission")
-        ? "Camera permission was denied. Allow camera access for this site, then try again."
-        : message);
+      const name = error instanceof Error ? error.name : "";
+      setCameraError(name === "NotAllowedError"
+        ? "Camera permission was denied. Allow camera access for this site, or upload a QR image below."
+        : "Unable to open the camera. Try uploading a QR image below.");
     } finally {
-      setCameraStarting(false);
+      if (cameraRunRef.current === cameraRun) setCameraStarting(false);
+    }
+  };
+
+  const scanImage = async (event: ChangeEvent<HTMLInputElement>) => {
+    const image = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (!image || readingImage || submittingRef.current) return;
+
+    stopCamera();
+    const imageRun = cameraRunRef.current;
+    setCameraError(null);
+    setReadingImage(true);
+    const url = URL.createObjectURL(image);
+    try {
+      const result = await new BrowserQRCodeReader().decodeFromImageUrl(url);
+      if (cameraRunRef.current !== imageRun || latestScanData.current.registryStatus !== "ready") return;
+      const match = findPetByQr(latestScanData.current.pets, result.getText());
+      if (match) await finishScan(match);
+      else setCameraError("QR was read, but it didn’t match an issued Pet ID.");
+    } catch {
+      if (cameraRunRef.current === imageRun) setCameraError("No QR code could be read from this image. Try a clear screenshot of the enlarged QR code or enter the Pet ID.");
+    } finally {
+      URL.revokeObjectURL(url);
+      if (cameraRunRef.current === imageRun) setReadingImage(false);
     }
   };
 
   const submitManual = () => {
-    if (submittingRef.current) return;
+    if (submittingRef.current || readingImage || registryStatus !== "ready") return;
     const query = manualValue.trim().toLowerCase();
-    const normalizedQuery = query.replace(/[\s-]/g, "");
     if (!query) {
       setManualError("Enter a pet ID or name.");
       return;
     }
-    const match = pets.find(
+    const match = findPetByQr(pets, query) ?? pets.find(
       (item) =>
-        item.id.toLowerCase() === query ||
         item.id.toLowerCase().endsWith(query) ||
-        item.qrCode?.replace(/[\s-]/g, "").toLowerCase() === normalizedQuery ||
         item.name.toLowerCase() === query,
     );
     if (!match) {
@@ -205,8 +243,8 @@ export function ScannerScreen({ pets, registrationRequestPetIds, onRecord, onReq
       return;
     }
     setManualError(null);
-    scanCompletedRef.current = true;
     stopCamera();
+    setCameraError(null);
     void finishScan(match);
   };
 
@@ -351,11 +389,12 @@ export function ScannerScreen({ pets, registrationRequestPetIds, onRecord, onReq
 
               <video
                 ref={videoRef}
-                className={`size-full object-cover ${cameraActive ? "" : "hidden"}`}
+                className={cn("size-full object-cover", !cameraActive && "opacity-0")}
                 muted
                 autoPlay
                 playsInline
                 aria-label="Live QR camera preview"
+                aria-hidden={!cameraActive}
               />
               {!cameraActive ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-primary-foreground/55">
@@ -378,7 +417,7 @@ export function ScannerScreen({ pets, registrationRequestPetIds, onRecord, onReq
 
             <Button
               onClick={cameraActive ? stopCamera : startCamera}
-              disabled={cameraStarting || recording}
+              disabled={!cameraActive && (cameraStarting || recording || readingImage || registryStatus !== "ready")}
               className="h-11 w-full rounded-xl text-[12px] font-bold shadow-glow"
             >
               {cameraActive ? <CameraOff className="size-4" /> : <ScanLine className="size-4" />}
@@ -389,6 +428,24 @@ export function ScannerScreen({ pets, registrationRequestPetIds, onRecord, onReq
               <p className="rounded-lg border border-warning/30 bg-warning/10 p-2.5 text-[10px] leading-relaxed text-foreground" role="status">
                 {cameraError}
               </p>
+            ) : null}
+
+            <input ref={imageInputRef} type="file" accept="image/*" onChange={(event) => void scanImage(event)} hidden />
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              disabled={cameraStarting || recording || readingImage || registryStatus !== "ready"}
+              onClick={() => imageInputRef.current?.click()}
+            >
+              <ImageUp className="size-4" />
+              {readingImage ? "Reading QR image…" : "Scan a QR image"}
+            </Button>
+            {registryStatus === "loading" ? <p role="status" className="text-xs text-muted-foreground">Loading issued Pet IDs…</p> : null}
+            {registryStatus === "error" ? (
+              <div role="alert" className="rounded-lg border border-destructive/30 p-2 text-xs">
+                Couldn’t load issued Pet IDs. <button type="button" className="font-semibold text-primary underline" onClick={onRetryRegistry}>Try again</button>
+              </div>
             ) : null}
 
             <button
@@ -418,7 +475,7 @@ export function ScannerScreen({ pets, registrationRequestPetIds, onRecord, onReq
                   />
                   <Button
                     onClick={submitManual}
-                    disabled={recording}
+                    disabled={recording || readingImage || registryStatus !== "ready"}
                     className="h-9 shrink-0 rounded-lg px-3 text-[11px] font-bold"
                   >
                     Find
