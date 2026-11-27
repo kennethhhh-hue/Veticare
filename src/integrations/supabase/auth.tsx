@@ -5,6 +5,7 @@ import {
 } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ownerExpiredLoginPath, ownerSessionExpired } from "@/hooks/use-owner-session-timeout";
 import { supabase } from "./client";
@@ -87,6 +88,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
+function AccountAccessNotice({
+  title,
+  message,
+  phoneOnly = false,
+}: {
+  title: string;
+  message: string;
+  phoneOnly?: boolean;
+}) {
+  const navigate = useNavigate();
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState<string | null>(null);
+
+  const logOut = async () => {
+    setSigningOut(true);
+    setSignOutError(null);
+    try {
+      const { error } = await supabase.auth.signOut({ scope: "local" });
+      if (error) throw error;
+      navigate("/login", { replace: true });
+    } catch (error) {
+      setSignOutError(error instanceof Error ? error.message : "Could not log out. Please try again.");
+      setSigningOut(false);
+    }
+  };
+
+  return (
+    <main className="grid min-h-screen place-items-center px-6 text-center">
+      <div className="w-full max-w-md rounded-xl border border-border bg-card p-6">
+        {phoneOnly && (
+          <div className="mx-auto mb-4 grid size-12 place-items-center rounded-xl bg-primary/10 text-primary">
+            <Smartphone aria-hidden="true" className="size-6" />
+          </div>
+        )}
+        <h1 className="text-lg font-bold text-foreground">{title}</h1>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{message}</p>
+        {signOutError && <p className="mt-3 text-sm text-destructive" role="alert">{signOutError}</p>}
+        <Button type="button" className="mt-5 w-full" onClick={() => void logOut()} disabled={signingOut}>
+          {signingOut ? "Signing out..." : phoneOnly ? "Log out" : "Back to login"}
+        </Button>
+      </div>
+    </main>
+  );
+}
+
 export function RequireAuth({
   children,
   role: requiredRole,
@@ -96,21 +142,6 @@ export function RequireAuth({
 }) {
   const { session, role, approvalStatus, isActive, loading } = useAuth();
   const location = useLocation();
-  const navigate = useNavigate();
-  const [signingOut, setSigningOut] = useState(false);
-  const [signOutError, setSignOutError] = useState<string | null>(null);
-
-  const backToLogin = async () => {
-    setSigningOut(true);
-    setSignOutError(null);
-    const { error } = await supabase.auth.signOut({ scope: "local" });
-    if (error) {
-      setSignOutError(error.message);
-      setSigningOut(false);
-      return;
-    }
-    navigate("/login", { replace: true });
-  };
 
   if (loading) {
     return (
@@ -137,6 +168,17 @@ export function RequireAuth({
     return <Navigate to={home} replace />;
   }
 
+  // A narrow desktop window can use the mobile layout but still isn't a phone.
+  if (role !== "admin" && !/\biPhone\b|\bWindows Phone\b|\bAndroid\b.*\bMobile\b/i.test(navigator.userAgent)) {
+    return (
+      <AccountAccessNotice
+        title="Open Veticare on your phone"
+        message="Pet owners and City Pound Personnel can only use Veticare on a mobile phone. Open Veticare in your phone’s browser and sign in with the same account."
+        phoneOnly
+      />
+    );
+  }
+
   if (isActive === false) {
     return (
       <div className="grid min-h-screen place-items-center px-6 text-center text-sm text-muted-foreground">
@@ -147,22 +189,12 @@ export function RequireAuth({
 
   if (requiredRole === "owner" && approvalStatus !== "approved") {
     return (
-      <div className="grid min-h-screen place-items-center px-6 text-center">
-        <div className="max-w-md rounded-xl border border-border bg-card p-6">
-          <h1 className="text-lg font-bold text-foreground">
-            {approvalStatus === "rejected" ? "Account needs updates" : "Account awaiting review"}
-          </h1>
-          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            {approvalStatus === "rejected"
-              ? "Your owner details need correction. Contact the City Veterinary Office for help."
-              : "The City Veterinary Office is reviewing your owner details. You can use the pet-owner app after your account is approved."}
-          </p>
-          {signOutError ? <p className="mt-3 text-sm text-destructive" role="alert">{signOutError}</p> : null}
-          <Button type="button" className="mt-5 w-full" onClick={() => void backToLogin()} disabled={signingOut}>
-            {signingOut ? "Signing out..." : "Back to login"}
-          </Button>
-        </div>
-      </div>
+      <AccountAccessNotice
+        title={approvalStatus === "rejected" ? "Account needs updates" : "Account awaiting review"}
+        message={approvalStatus === "rejected"
+          ? "Your owner details need correction. Contact the City Veterinary Office for help."
+          : "The City Veterinary Office is reviewing your owner details. You can use the pet-owner app after your account is approved."}
+      />
     );
   }
 

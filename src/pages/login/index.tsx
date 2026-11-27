@@ -82,7 +82,7 @@ const Login = () => {
       setCreatingAccount(false);
       setPassword("");
       setConfirmPassword("");
-      setSignupMessage("Check your email to confirm your account, then sign in.");
+      setSignupMessage("Check your email to confirm your account, then sign in on your mobile phone.");
       navigate("/login", { replace: true });
       return;
     }

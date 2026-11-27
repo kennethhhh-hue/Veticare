@@ -1,16 +1,13 @@
 import { ImpoundClaimBadge } from "@/components/veticare/impound-claim-badge";
 import {
   ArrowLeft,
-  BadgeCheck,
   BellRing,
   ClipboardList,
-  Flag,
   MapPin,
   Phone,
   QrCode,
   ShieldCheck,
   Syringe,
-  TriangleAlert,
 } from "lucide-react";
 import { PetPhoto } from "@/components/owner-app/pet-photo";
 import { Button } from "@/components/ui/button";
@@ -41,36 +38,24 @@ const vaccinationTone: Record<VaccinationState, string> = {
 
 interface PetRecordProps {
   pet: PersonnelPet;
-  mode?: "scan" | "verify";
   onBack?: () => void;
-  onVerify?: () => void;
-  onFlag?: () => void;
   onRecordVaccination?: () => void;
   onRequestRegistration?: () => void;
   registrationRequested?: boolean;
   onScanAnother?: () => void;
   onLogImpound?: () => void;
-  verified?: boolean;
-  flagged?: boolean;
 }
 
 export function PetRecord({
   pet,
-  mode = "scan",
   onBack,
-  onVerify,
-  onFlag,
   onRecordVaccination,
   onRequestRegistration,
   registrationRequested = false,
   onScanAnother,
   onLogImpound,
-  verified = false,
-  flagged = false,
 }: PetRecordProps) {
   const registrationOk = pet.registration === "active" || pet.registration === "expiring";
-  const vaccinationOk = pet.vaccination === "complete";
-  const needsReview = !registrationOk || !vaccinationOk;
 
   return (
     <div className="space-y-3">
@@ -87,7 +72,7 @@ export function PetRecord({
         ) : (
           <span className="flex items-center gap-1.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-primary">
             <QrCode className="size-3" />
-            {mode === "scan" ? "Scan result" : "Pet record"}
+            Pet record
           </span>
         )}
         <span className="flex items-center gap-1 rounded-full bg-secondary px-2 py-1 text-[8.5px] font-bold uppercase tracking-wide text-muted-foreground">
@@ -191,30 +176,8 @@ export function PetRecord({
         </div>
       </div>
 
-      {mode === "verify" ? (
-        <div
-          className={cn(
-            "flex items-start gap-2 rounded-xl border px-2.5 py-2",
-            needsReview
-              ? "border-warning/25 bg-warning/10"
-              : "border-success/20 bg-success/5",
-          )}
-        >
-          {needsReview ? (
-            <TriangleAlert className="mt-0.5 size-3.5 shrink-0 text-warning" />
-          ) : (
-            <BadgeCheck className="mt-0.5 size-3.5 shrink-0 text-success" />
-          )}
-          <p className="text-[9.5px] leading-relaxed text-muted-foreground">
-            {needsReview
-              ? [!registrationOk ? `Registration: ${registrationLabels[pet.registration]}.` : "", !vaccinationOk ? `${vaccinationLabels[pet.vaccination]}.` : ""].filter(Boolean).join(" ")
-              : "Registration is active and a vaccination is on file."}
-          </p>
-        </div>
-      ) : null}
-
       <div className="flex flex-col gap-2">
-        {mode === "scan" && onLogImpound && pet.owner !== "New Owner Draft" ? (
+        {onLogImpound && pet.owner !== "New Owner Draft" ? (
           <Button
             variant="outline"
             onClick={onLogImpound}
@@ -236,33 +199,6 @@ export function PetRecord({
             {registrationOk ? "Already Registered" : registrationRequested ? "Registration Requested" : scanFollowUpLabels.registration}
           </Button>
         ) : null}
-        {onVerify ? (
-          <Button
-            onClick={onVerify}
-            disabled={verified || pet.registration === "unregistered"}
-            className="h-10 w-full rounded-xl text-[11.5px] font-bold shadow-glow disabled:opacity-60 disabled:shadow-none"
-          >
-            <BadgeCheck className="size-4" />
-            {verified
-              ? "Verification recorded today"
-              : mode === "scan"
-                ? "Record field verification"
-                : "Record annual verification"}
-          </Button>
-        ) : null}
-
-        {onFlag ? (
-          <Button
-            variant="outline"
-            onClick={onFlag}
-            disabled={flagged}
-            className="h-10 w-full rounded-xl border-border text-[11.5px] font-semibold text-foreground/85 disabled:opacity-60"
-          >
-            <Flag className="size-4 text-warning" />
-            {flagged ? "Flagged for OCVAS review" : "Mark for OCVAS review"}
-          </Button>
-        ) : null}
-
         {onScanAnother ? (
           <button
             type="button"
@@ -274,12 +210,6 @@ export function PetRecord({
           </button>
         ) : null}
       </div>
-
-      {mode === "verify" ? (
-        <p className="text-center text-[9px] leading-relaxed text-muted-foreground/80">
-          You can verify registration here. To record a vaccination, open the pet in Scan.
-        </p>
-      ) : null}
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { HomeScreen } from "@/pages/personnel/home-screen";
 import { ScannerScreen } from "@/pages/personnel/scanner-screen";
+import type { ScannerPetActions } from "@/pages/personnel/scanner-pet-result";
 import { VerifyScreen } from "@/pages/personnel/verify-screen";
 import { HistoryScreen } from "@/pages/personnel/history-screen";
 import { ProfileScreen } from "@/pages/personnel/profile-screen";
@@ -402,25 +403,30 @@ const PersonnelApp = () => {
     return true;
   };
 
-  const verifyPet = async (petId: string): Promise<boolean> => {
-    const pet = scanRegistry.find((item) => item.id === petId);
-    if (!activityReady || !pet) {
-      toast.error(activityError || "Personnel activity or pet record is unavailable.");
-      return false;
-    }
-    const { data, error } = await supabase.from("personnel_verifications")
-      .insert({ pet_record_id: pet.recordId }).select("*").single();
-    if (error) { reportActivityError(error); return false; }
-    activityVersion.current++;
-    setActivityError(null);
-    setVerifications((current) => [data, ...current]);
-    return true;
+  const scannerPetActions: ScannerPetActions = {
+    registrationRequestPetIds: reviewFlags.filter((flag) => flag.request_type === "registration").map((flag) => flag.pet_record_id),
+    onRequestRegistration: (petId, scanId) =>
+      withActivityLock(`flag:${petId}:registration`, false, () => flagPet(petId, scanId, "registration")),
+    onRecordVaccination: (pet, name, date) =>
+      withActivityLock(`vaccination:${pet.recordId}`, false, () => recordVaccination(pet, name, date)),
+    onImpound: (pet, location, date) => withActivityLock("impound", false, async () => {
+      const { error } = await supabase.from("personnel_impound_reports").insert({
+        pet_record_id: pet.recordId,
+        location_found: location,
+        date_impounded: date,
+      });
+      if (error?.code === "23502" && error.message.includes('"reason"')) {
+        throw new Error("Apply the personnel scan form fields migration to submit an impound report without notes.");
+      }
+      if (error) throw error;
+      void loadImpoundReports();
+      return true;
+    }),
   };
 
   const verifiedIds = scanRegistry.filter((pet) => verifications.some((verification) =>
     verification.pet_record_id === pet.recordId && getPhilippineDateKey(new Date(verification.created_at)) === today,
   )).map((pet) => pet.id);
-  const reviewIds = scanRegistry.filter((pet) => reviewFlags.some((flag) => flag.pet_record_id === pet.recordId && flag.request_type === "general")).map((pet) => pet.id);
   const scanHistory = useMemo(() => {
     const petsById = new Map(scanRegistry.map((pet) => [pet.recordId, pet]));
     return scans.map((scan) => ({
@@ -470,31 +476,15 @@ const PersonnelApp = () => {
                   registryStatus={registryStatus}
                   onRetryRegistry={() => { setRegistryStatus("loading"); void loadIssuedPets(); }}
                   onRecord={(pet, result, note) => withActivityLock<string | null>("scan", null, () => addScan(pet, result, note))}
-                  registrationRequestPetIds={reviewFlags.filter((flag) => flag.request_type === "registration").map((flag) => flag.pet_record_id)}
-                  onRequestRegistration={(scanId, petId) => withActivityLock(`flag:${petId}:registration`, false, () => flagPet(petId, scanId, "registration"))}
-                  onRecordVaccination={(pet, name, date) => withActivityLock(`vaccination:${pet.recordId}`, false, () => recordVaccination(pet, name, date))}
-                  onImpound={(pet, location, date) => withActivityLock("impound", false, async () => {
-                    const { error } = await supabase.from("personnel_impound_reports").insert({
-                      pet_record_id: pet.recordId,
-                      location_found: location,
-                      date_impounded: date,
-                    });
-                    if (error?.code === "23502" && error.message.includes('"reason"')) {
-                      throw new Error("Apply the personnel scan form fields migration to submit an impound report without notes.");
-                    }
-                    if (error) throw error;
-                    void loadImpoundReports();
-                    return true;
-                  })}
+                  actions={scannerPetActions}
                 />
               ) : null}
               {tab === "verify" ? (
                 <VerifyScreen
                   pets={scanRegistry}
                   verifiedIds={verifiedIds}
-                  reviewIds={reviewIds}
-                  onVerify={(petId) => withActivityLock(`verify:${petId}`, false, () => verifyPet(petId))}
-                  onFlag={(petId) => withActivityLock(`flag:${petId}`, false, () => flagPet(petId))}
+                  actions={scannerPetActions}
+                  onScanAnother={() => setTab("scan")}
                 />
               ) : null}
               {tab === "history" ? <HistoryScreen scans={scanHistory} pets={scanRegistry} /> : null}

@@ -51,7 +51,7 @@ export function HistoryScreen({ scans, pets }: HistoryScreenProps) {
         </header>
         <div className="mt-4 space-y-3 px-5">
           {pet ? (
-            <PetRecord pet={pet} mode="scan" onBack={() => setSelectedId(null)} />
+            <PetRecord pet={pet} onBack={() => setSelectedId(null)} />
           ) : (
             <button
               type="button"

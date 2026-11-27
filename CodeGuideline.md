@@ -52,7 +52,7 @@ Whenever a new module (such as a component, hook, or utility) or a new page is a
 - **src/pages/pet-id/**: Pet ID route (`/pet-id`). Issued-ID registry with status filters, copy-to-clipboard and a digital ID preview sheet.
 - **src/data/shelter-records.ts**: Sample impounded dogs, adoption applications and pet ID records.
 - **src/components/veticare/id-pattern.tsx**: Shared sample ID code pattern used by the owner app card and the admin ID preview.
-- **src/pages/personnel/**: City Pound Personnel mobile app (`/personnel`, tabs via `?tab=`). Dashboard, QR scanner with sample registry lookups, annual verification, scan history and profile; `pet-record.tsx` renders the shared pet/owner verification card.
+- **src/pages/personnel/**: City Pound Personnel mobile app (`/personnel`, tabs via `?tab=`). Dashboard, QR scanner, Verify pet list, scan history and profile. `scanner-pet-result.tsx` shares the scanner result and action forms with Verify. `pet-record.tsx` renders the pet and owner card.
 - **src/data/personnel.ts**: Sample field personnel profile, registry pets with registration/vaccination states, shift scans and helpers.
 - **src/pages/report-center/**: Reports route (`/reports`). Metrics, a report studio (category/period/format) and the generated-report library with search and filters.
 - **src/pages/users/**: Users & Roles route (`/users`). Team directory with role/status filters, invite dialog, role editor sheet and removal confirmation.

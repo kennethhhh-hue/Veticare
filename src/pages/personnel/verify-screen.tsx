@@ -1,10 +1,9 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { ChevronRight, Search, ShieldCheck } from "lucide-react";
-import { toast } from "sonner";
 import { PetPhoto } from "@/components/owner-app/pet-photo";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { PetRecord } from "@/pages/personnel/pet-record";
+import { ScannerPetResult, type ScannerPetActions } from "./scanner-pet-result";
 import { ImpoundClaimBadge } from "@/components/veticare/impound-claim-badge";
 import {
   registrationLabels,
@@ -29,76 +28,29 @@ const registrationTone: Record<RegistrationState, string> = {
 
 export function VerifyScreen({
   verifiedIds,
-  reviewIds,
-  onVerify,
-  onFlag,
+  actions,
+  onScanAnother,
   pets,
 }: {
   pets: PersonnelPet[];
   verifiedIds: string[];
-  reviewIds: string[];
-  onVerify: (petId: string) => Promise<boolean>;
-  onFlag: (petId: string) => Promise<boolean>;
+  actions: ScannerPetActions;
+  onScanAnother: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<FilterKey>("all");
   const [selectedPet, setSelected] = useState<PersonnelPet | null>(null);
   const selected = selectedPet ? pets.find((pet) => pet.recordId === selectedPet.recordId) ?? selectedPet : null;
-  const pendingRef = useRef(false);
-  const [pending, setPending] = useState(false);
-
-  const submit = async (pet: PersonnelPet, action: "verify" | "flag") => {
-    if (pendingRef.current) return;
-    pendingRef.current = true;
-    setPending(true);
-    try {
-      const success = await (action === "verify" ? onVerify(pet.id) : onFlag(pet.id));
-      if (success) {
-        if (action === "verify") {
-          toast.success(`Verification recorded for ${pet.name}`, {
-            description: `${pet.id} • verification recorded by personnel.`,
-          });
-        } else {
-          toast.info(`${pet.name} marked for OCVAS review`, {
-            description: "An admin will review this record.",
-          });
-        }
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to record personnel activity.");
-    } finally {
-      pendingRef.current = false;
-      setPending(false);
-    }
-  };
 
   if (selected) {
-    const verified = verifiedIds.includes(selected.id);
     return (
-      <div className="pb-6">
-        <header className="px-5 pt-5">
-          <p className="text-[9.5px] font-bold uppercase tracking-[0.16em] text-primary">
-            Annual registration
-          </p>
-          <h1 className="mt-1 text-[22px] font-extrabold leading-none tracking-[-0.03em] text-foreground">
-            Verify record
-          </h1>
-        </header>
-        <div className="mt-4 px-5">
-          <fieldset disabled={pending}>
-            <PetRecord
-              pet={selected}
-              mode="verify"
-              onBack={() => setSelected(null)}
-              verified={verified}
-              flagged={reviewIds.includes(selected.id)}
-              onVerify={() => void submit(selected, "verify")}
-              onFlag={() => void submit(selected, "flag")}
-            />
-            {pending ? <p role="status" className="mt-2 text-xs text-muted-foreground">Saving activity...</p> : null}
-          </fieldset>
-        </div>
-      </div>
+      <ScannerPetResult
+        key={selected.recordId}
+        pet={selected}
+        onBack={() => setSelected(null)}
+        onScanAnother={onScanAnother}
+        actions={actions}
+      />
     );
   }
 
@@ -130,7 +82,7 @@ export function VerifyScreen({
           </h1>
           <span className="mt-0.5 flex items-center gap-1 rounded-full bg-secondary px-2 py-1 text-[8px] font-bold uppercase tracking-wide text-muted-foreground">
             <ShieldCheck className="size-2.5 text-primary" />
-            Verify only
+            Issued Pet IDs
           </span>
         </div>
         <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
@@ -221,15 +173,6 @@ export function VerifyScreen({
               );
             })
           )}
-        </div>
-
-        <div className="mt-4 rounded-xl border border-border bg-secondary/40 p-3">
-          <p className="text-[8.5px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-            Limited access
-          </p>
-          <p className="mt-1 text-[9.5px] leading-relaxed text-muted-foreground">
-            Personnel can verify registrations, flag records for OCVAS review, and record vaccinations from Scan.
-          </p>
         </div>
       </div>
     </div>
