@@ -3399,9 +3399,9 @@ export type Database = {
         ]
       }
       pet_vaccinations: {
-        Row: { id: string; pet_record_id: string; vaccine_name: string; administered_on: string; recorded_by: string; created_at: string }
-        Insert: { id?: string; pet_record_id: string; vaccine_name: string; administered_on: string; recorded_by?: string; created_at?: string }
-        Update: { vaccine_name?: string; administered_on?: string }
+        Row: { id: string; pet_record_id: string; vaccine_name: string; administered_on: string; next_due_on: string | null; recorded_by: string; created_at: string }
+        Insert: { id?: string; pet_record_id: string; vaccine_name: string; administered_on: string; next_due_on?: string | null; recorded_by?: string; created_at?: string }
+        Update: { vaccine_name?: string; administered_on?: string; next_due_on?: string | null }
         Relationships: [
           { foreignKeyName: "pet_vaccinations_pet_record_id_fkey"; columns: ["pet_record_id"]; referencedRelation: "pets"; referencedColumns: ["id"] },
           { foreignKeyName: "pet_vaccinations_recorded_by_fkey"; columns: ["recorded_by"]; referencedRelation: "profiles"; referencedColumns: ["id"] },

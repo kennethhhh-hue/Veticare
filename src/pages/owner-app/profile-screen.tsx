@@ -19,7 +19,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { BarangaySelect } from "@/components/owner-app/barangay-select";
 import { OcvasContactInfo } from "@/components/veticare/ocvas-contact-info";
 import { ProfilePhoto } from "@/components/veticare/profile-photo";
-import { signOut } from "@/integrations/supabase/auth-context";
+import { signOut, useAuth } from "@/integrations/supabase/auth-context";
+import { supabase } from "@/integrations/supabase/client";
 import type { OwnerProfile } from "@/lib/owner-preview-store";
 
 export function ProfileScreen({
@@ -34,13 +35,28 @@ export function ProfileScreen({
   onPhotoUpdated: (avatarUrl: string) => void;
 }) {
   const navigate = useNavigate();
-  const [notifications, setNotifications] = useState(() => localStorage.getItem("veticare-owner-reminders") !== "off");
+  const { session } = useAuth();
+  const vaccinationReminders = session?.user.user_metadata.vaccination_email_reminders !== false;
+  const [savingReminders, setSavingReminders] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [documentsOpen, setDocumentsOpen] = useState(false);
   const [contactOpen, setContactOpen] = useState(false);
   const [draft, setDraft] = useState(profile);
 
   const [savingProfile, setSavingProfile] = useState(false);
+
+  const saveVaccinationReminders = async (enabled: boolean) => {
+    setSavingReminders(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ data: { vaccination_email_reminders: enabled } });
+      if (error) throw error;
+      toast.success(enabled ? "Email reminders on" : "Email reminders paused");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to save your reminder preference.");
+    } finally {
+      setSavingReminders(false);
+    }
+  };
 
   const saveProfile = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -106,14 +122,11 @@ export function ProfileScreen({
         <div className="mt-2 overflow-hidden rounded-2xl border border-border bg-card">
           <div className="flex items-center gap-2.5 border-b border-border px-3.5 py-3">
             <span className="grid size-7 place-items-center rounded-lg bg-primary-soft text-primary"><BellRing className="size-3.5" /></span>
-            <div className="min-w-0 flex-1"><p className="text-[11.5px] font-semibold text-foreground">Vaccination reminders</p><p className="text-[9px] text-muted-foreground">Preference saved on this device</p></div>
+            <div className="min-w-0 flex-1"><p className="text-[11.5px] font-semibold text-foreground">Vaccination email reminders</p><p className="text-[9px] text-muted-foreground">Get an email when a recorded vaccination is due soon or overdue.</p></div>
             <Switch
-              checked={notifications}
-              onCheckedChange={(value) => {
-                setNotifications(value);
-                localStorage.setItem("veticare-owner-reminders", value ? "on" : "off");
-                toast.success(value ? "Reminders on" : "Reminders paused");
-              }}
+              checked={vaccinationReminders}
+              disabled={!session || savingReminders}
+              onCheckedChange={(value) => void saveVaccinationReminders(value)}
               className="data-[state=checked]:bg-primary"
               aria-label="Toggle vaccination reminders"
             />

@@ -607,8 +607,8 @@ const ImpoundedDogs = () => {
           </div>
         ) : null}
 
-        <div className="hidden border-y border-border bg-secondary/40 px-5 py-2 xl:grid xl:grid-cols-[minmax(0,1.5fr)_88px_80px_minmax(0,0.9fr)_100px_100px_140px] xl:gap-4">
-            {["Animal / IDs", "Type / sex", "Color", "Location found", "Date impounded", "Impound status", "Adoption"].map((label) => (
+        <div className="hidden border-y border-border bg-secondary/40 px-5 py-2 xl:grid xl:grid-cols-[minmax(0,1.5fr)_88px_80px_100px_minmax(0,0.9fr)_100px_140px] xl:gap-4">
+            {["Animal / IDs", "Type / sex", "Color", "Date impounded", "Location found", "Impound status", "Adoption"].map((label) => (
             <p
               key={label}
               className="text-[9px] font-bold uppercase tracking-[0.12em] text-muted-foreground"
@@ -661,7 +661,7 @@ const ImpoundedDogs = () => {
                     setSelected(dog);
                   }
                 }}
-                className="grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2.5 px-3.5 py-3.5 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary sm:px-4 xl:grid-cols-[minmax(0,1.5fr)_88px_80px_minmax(0,0.9fr)_100px_100px_140px] xl:gap-4 xl:px-5"
+                className="grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2.5 px-3.5 py-3.5 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary sm:px-4 xl:grid-cols-[minmax(0,1.5fr)_88px_80px_100px_minmax(0,0.9fr)_100px_140px] xl:gap-4 xl:px-5"
               >
                 <div className="order-1 flex min-w-0 items-center gap-2.5 xl:order-none">
                   <div onClick={(event) => { if (getPhotoUrl(dog)) event.stopPropagation(); }}>

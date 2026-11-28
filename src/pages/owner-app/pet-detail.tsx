@@ -217,7 +217,10 @@ export function PetDetail({ pet, onBack, onShowId, onEdit, onPhotoUpdated, onReq
               {vaccinations.data.map((record) => (
                 <li key={record.id} className="flex items-start justify-between gap-3 py-2 text-[11px]">
                   <span className="min-w-0 break-words font-semibold text-foreground">{record.vaccine_name}</span>
-                  <time dateTime={record.administered_on} className="shrink-0 text-muted-foreground">{formatCalendarDate(record.administered_on)}</time>
+                  <div className="shrink-0 text-right text-muted-foreground">
+                    <time dateTime={record.administered_on}>Given {formatCalendarDate(record.administered_on)}</time>
+                    {record.next_due_on ? <time dateTime={record.next_due_on} className="block">Next due {formatCalendarDate(record.next_due_on)}</time> : null}
+                  </div>
                 </li>
               ))}
             </ul>

@@ -11,7 +11,7 @@ export function usePetVaccinations(petId: string) {
     enabled: Boolean(userId),
     queryFn: async () => {
       const { data, error } = await supabase.from("pet_vaccinations")
-        .select("id, vaccine_name, administered_on")
+        .select("id, vaccine_name, administered_on, next_due_on")
         .eq("pet_record_id", petId)
         .order("administered_on", { ascending: false })
         .order("created_at", { ascending: false });

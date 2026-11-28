@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import type { PostgrestError } from "@supabase/supabase-js";
 import {
   Check,
+  ChevronsUpDown,
   Clock,
   Eye,
   Heart,
@@ -26,6 +28,8 @@ import { Pagination } from "@/components/admin/pagination";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Dialog,
   DialogContent,
@@ -39,11 +43,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { getPhilippineDateKey } from "@/lib/philippine-date";
+import { cn } from "@/lib/utils";
 import {
   type AdoptionApplication,
   type AdoptionStatus,
 } from "@/data/shelter-records";
 import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
 import { sidebarCountKeys } from "@/data/veticare";
 import { ImpoundClaimBadge } from "@/components/veticare/impound-claim-badge";
 
@@ -53,6 +59,72 @@ interface ApplicantOption {
   email: string;
   phone: string;
   area: string;
+}
+
+type ApplicantProfile = Pick<Tables<"profiles">, "id" | "full_name" | "email" | "phone" | "barangay" | "account_deleted_at">;
+
+function ApplicantPicker({
+  applicants,
+  selected,
+  onSelect,
+  disabled,
+}: {
+  applicants: ApplicantOption[];
+  selected: ApplicantOption | undefined;
+  onSelect: (id: string) => void;
+  disabled: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover modal open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button id="adoption-owner" type="button" variant="outline" disabled={disabled || applicants.length === 0}
+          aria-labelledby="adoption-owner-label adoption-owner-value"
+          className="h-10 w-full justify-between border-input bg-background px-3 text-left font-normal">
+          <span id="adoption-owner-value" className={cn("truncate", !selected && "text-muted-foreground")}>{selected?.name || "Select owner"}</span>
+          <ChevronsUpDown aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent aria-label="Select an owner" align="start" className="w-[var(--radix-popover-trigger-width)] p-0">
+        <Command label="Adoption owners">
+          <CommandInput placeholder="Search name, email, or barangay…" aria-label="Search owners" />
+          <CommandList className="max-h-[min(240px,calc(var(--radix-popover-content-available-height)-3rem))]">
+            <CommandEmpty>No matching owners.</CommandEmpty>
+            <CommandGroup>
+              {applicants.map((owner) => (
+                <CommandItem key={owner.id} value={owner.id} keywords={[owner.name, owner.email, owner.area]}
+                  onSelect={() => { onSelect(owner.id); setOpen(false); }}>
+                  <Check aria-hidden="true" className={cn("mr-2 size-4 shrink-0", selected?.id === owner.id ? "opacity-100" : "opacity-0")} />
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium">{owner.name}</span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {[owner.email, owner.area === "—" ? "" : owner.area].filter(Boolean).join(" • ")}
+                    </span>
+                  </span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+async function loadApplicantProfiles(): Promise<{ data: ApplicantProfile[] | null; error: PostgrestError | null }> {
+  const profiles: ApplicantProfile[] = [];
+  const batchSize = 500;
+
+  for (let offset = 0; ; offset += batchSize) {
+    const { data, error } = await supabase.from("profiles")
+      .select("id, full_name, email, phone, barangay, account_deleted_at")
+      .eq("role", "owner").order("full_name").order("id")
+      .range(offset, offset + batchSize - 1);
+    if (error) return { data: null, error };
+    profiles.push(...data);
+    if (data.length < batchSize) return { data: profiles, error: null };
+  }
 }
 
 interface AnimalOption {
@@ -112,7 +184,7 @@ const Adoptions = () => {
     setLoadError(null);
     const [applicationsResult, profilesResult, impoundsResult, petPhotosResult] = await Promise.all([
       supabase.from("adoption_applications").select("*").order("created_at", { ascending: false }),
-      supabase.from("profiles").select("id, full_name, email, phone, barangay, account_deleted_at").eq("role", "owner").order("full_name"),
+      loadApplicantProfiles(),
       supabase.from("impounds").select("id, impound_id, pet_id, name, breed, animal_type, age, sex, color, photo_url, adoption_status, impound_status"),
       supabase.from("pets").select("pet_id, photo_url").not("pet_id", "is", null).not("photo_url", "is", null),
     ]);
@@ -177,6 +249,7 @@ const Adoptions = () => {
     setLoading(false);
   }, []);
 
+  const selectedApplicant = applicants.find((owner) => owner.id === applicantId);
   const selectedAnimal = availableAnimals.find((animal) => animal.id === animalId);
 
   useEffect(() => {
@@ -268,16 +341,14 @@ const Adoptions = () => {
 
   const createApplication = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const applicant = applicants.find((owner) => owner.id === applicantId);
-    const animal = availableAnimals.find((pet) => pet.id === animalId);
-    if (!applicant || !animal) return;
+    if (!selectedApplicant || !selectedAnimal || savingApplication) return;
     const now = new Date();
     const date = getPhilippineDateKey(now);
     setSavingApplication(true);
     const { error } = await supabase.from("adoption_applications").insert({
       application_id: `AD-${Date.now().toString().slice(-8)}`,
-      applicant_id: applicant.id,
-      impound_record_id: animal.id,
+      applicant_id: selectedApplicant.id,
+      impound_record_id: selectedAnimal.id,
       application_date: date,
       note: applicantNote.trim(),
     });
@@ -668,11 +739,8 @@ const Adoptions = () => {
             ) : null}
           <form onSubmit={createApplication} className="space-y-3">
             <div className="space-y-1.5">
-              <Label htmlFor="adoption-owner">Owner</Label>
-              <select id="adoption-owner" required value={applicantId} onChange={(event) => setApplicantId(event.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
-                <option value="">Select owner</option>
-                {applicants.map((owner) => <option key={owner.id} value={owner.id}>{owner.name} {owner.email ? `• ${owner.email}` : ""}</option>)}
-              </select>
+              <Label id="adoption-owner-label" htmlFor="adoption-owner">Owner</Label>
+              <ApplicantPicker applicants={applicants} selected={selectedApplicant} onSelect={setApplicantId} disabled={savingApplication} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="adoption-animal">Animal</Label>
@@ -688,7 +756,7 @@ const Adoptions = () => {
             {selectedAnimal ? <AnimalPreview animal={selectedAnimal} /> : null}
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setNewApplicationOpen(false)}>Cancel</Button>
-              <Button type="submit" disabled={savingApplication || applicants.length === 0 || availableAnimals.length === 0}><HeartHandshake className="size-4" />{savingApplication ? "Saving…" : "Create application"}</Button>
+              <Button type="submit" disabled={savingApplication || !selectedApplicant || !selectedAnimal}><HeartHandshake className="size-4" />{savingApplication ? "Saving…" : "Create application"}</Button>
             </div>
           </form>
         </DialogContent>

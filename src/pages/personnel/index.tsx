@@ -385,13 +385,15 @@ const PersonnelApp = () => {
     return true;
   };
 
-  const recordVaccination = async (pet: PersonnelPet, vaccineName: string, administeredOn: string) => {
+  const recordVaccination = async (pet: PersonnelPet, vaccineName: string, administeredOn: string, nextDueOn: string | null) => {
     const { error } = await supabase.from("pet_vaccinations").insert({
       pet_record_id: pet.recordId,
       vaccine_name: vaccineName,
       administered_on: administeredOn,
+      next_due_on: nextDueOn,
     });
-    if (error && error.code !== "23505") throw new Error(error.message);
+    if (error?.code === "23505") throw new Error("This vaccine is already recorded for that date. Ask an admin to update its due date.");
+    if (error) throw new Error(error.message);
 
     setScanRegistry((current) => current.map((record) =>
       record.recordId === pet.recordId && (!record.lastVaccinatedOn || record.lastVaccinatedOn <= administeredOn)
@@ -407,8 +409,8 @@ const PersonnelApp = () => {
     registrationRequestPetIds: reviewFlags.filter((flag) => flag.request_type === "registration").map((flag) => flag.pet_record_id),
     onRequestRegistration: (petId, scanId) =>
       withActivityLock(`flag:${petId}:registration`, false, () => flagPet(petId, scanId, "registration")),
-    onRecordVaccination: (pet, name, date) =>
-      withActivityLock(`vaccination:${pet.recordId}`, false, () => recordVaccination(pet, name, date)),
+    onRecordVaccination: (pet, name, date, nextDueOn) =>
+      withActivityLock(`vaccination:${pet.recordId}`, false, () => recordVaccination(pet, name, date, nextDueOn)),
     onImpound: (pet, location, date) => withActivityLock("impound", false, async () => {
       const { error } = await supabase.from("personnel_impound_reports").insert({
         pet_record_id: pet.recordId,

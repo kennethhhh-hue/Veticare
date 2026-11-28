@@ -12,7 +12,7 @@ import { PetRecord } from "./pet-record";
 export interface ScannerPetActions {
   registrationRequestPetIds: string[];
   onRequestRegistration: (petId: string, scanId?: string) => Promise<boolean>;
-  onRecordVaccination: (pet: PersonnelPet, vaccineName: string, administeredOn: string) => Promise<boolean>;
+  onRecordVaccination: (pet: PersonnelPet, vaccineName: string, administeredOn: string, nextDueOn: string | null) => Promise<boolean>;
   onImpound: (pet: PersonnelPet, locationFound: string, dateImpounded: string) => Promise<boolean>;
 }
 
@@ -75,6 +75,8 @@ export function ScannerPetResult({
   const [vaccineError, setVaccineError] = useState<string | null>(null);
   const [administeredOn, setAdministeredOn] = useState(getPhilippineDateKey);
   const [vaccinationDateError, setVaccinationDateError] = useState<string | null>(null);
+  const [nextDueOn, setNextDueOn] = useState("");
+  const [nextDueError, setNextDueError] = useState<string | null>(null);
   const [impoundOpen, setImpoundOpen] = useState(false);
   const [impoundSubmitting, setImpoundSubmitting] = useState(false);
   const [impoundError, setImpoundError] = useState<string | null>(null);
@@ -109,10 +111,15 @@ export function ScannerPetResult({
       return;
     }
     setVaccinationDateError(null);
+    if (nextDueOn && nextDueOn <= administeredOn) {
+      setNextDueError("The next due date must be after the date administered.");
+      return;
+    }
+    setNextDueError(null);
     savingScanActionRef.current = true;
     setSavingScanAction(true);
     try {
-      if (await onRecordVaccination(pet, name, administeredOn)) {
+      if (await onRecordVaccination(pet, name, administeredOn, nextDueOn || null)) {
         setVaccinationOpen(false);
         toast.success(`Vaccination saved to ${pet.name}'s health record.`);
       }
@@ -165,6 +172,8 @@ export function ScannerPetResult({
             setVaccineError(null);
             setAdministeredOn(getPhilippineDateKey());
             setVaccinationDateError(null);
+            setNextDueOn("");
+            setNextDueError(null);
             setVaccinationOpen(true);
           }}
           onRequestRegistration={() => void requestRegistration()}
@@ -225,6 +234,15 @@ export function ScannerPetResult({
               {vaccinationDateError ? (
                 <p id="last-vaccination-date-error" role="alert" className="text-xs text-destructive">{vaccinationDateError}</p>
               ) : null}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="vaccination-next-due">Next due date</Label>
+              <Input id="vaccination-next-due" type="date" value={nextDueOn} min={administeredOn} max="9999-12-31"
+                onChange={(event) => { setNextDueOn(event.target.value); setNextDueError(null); }}
+                disabled={savingScanAction} aria-invalid={Boolean(nextDueError)}
+                aria-describedby={nextDueError ? "vaccination-next-due-error" : undefined} />
+              {nextDueError ? <p id="vaccination-next-due-error" role="alert" className="text-xs text-destructive">{nextDueError}</p> : null}
+              <p className="text-xs text-muted-foreground">The owner can receive email reminders when a due date is set.</p>
             </div>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" disabled={savingScanAction} onClick={() => setVaccinationOpen(false)}>Cancel</Button>

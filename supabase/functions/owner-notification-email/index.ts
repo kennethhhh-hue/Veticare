@@ -5,10 +5,12 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 type OwnerEmail = {
   id: string;
   claim_token: string;
-  kind: "impound" | "registration";
+  kind: "impound" | "registration" | "vaccination_due" | "vaccination_overdue";
   pet_name: string;
   email: string | null;
   impounded_on: string | null;
+  vaccination_due_on?: string | null;
+  vaccine_name?: string | null;
 };
 
 type Delivery = { status: "pending" | "sent" | "skipped" | "failed"; last_error: string | null };
@@ -26,14 +28,23 @@ function emailContent(job: OwnerEmail) {
     };
   }
 
+  if (job.kind === "vaccination_due" || job.kind === "vaccination_overdue") {
+    if (!job.vaccination_due_on || !job.vaccine_name) return null;
+    const date = dateFormat.format(new Date(`${job.vaccination_due_on}T00:00:00Z`));
+    const overdue = job.kind === "vaccination_overdue";
+    return {
+      subject: overdue ? "Veticare: Pet vaccination overdue" : "Veticare: Pet vaccination reminder",
+      text: `The next ${job.vaccine_name} vaccination for ${job.pet_name} ${overdue ? "was due" : "is due"} on ${date}. Please contact the Batangas City Veterinary Office or your veterinarian to arrange the next vaccination.`,
+    };
+  }
+
   return {
     subject: "Veticare: Pet registration renewal required",
     text: `The registration for your pet ${job.pet_name} has expired. Please sign in to Veticare or contact the Batangas City Veterinary Office to request renewal.`,
   };
 }
 
-function encodeEmail(job: OwnerEmail, from: string, to: string) {
-  const { subject, text } = emailContent(job);
+function encodeEmail(job: OwnerEmail, { subject, text }: { subject: string; text: string }, from: string, to: string) {
   const body = Buffer.from(text, "utf8").toString("base64").replace(/.{1,76}/g, "$&\r\n");
   const message = [
     `From: Veticare <${from}>`,
@@ -136,13 +147,16 @@ Deno.serve(async (request) => {
 
   const results = { sent: 0, pending: 0, skipped: 0, failed: 0, writeErrors: 0 };
   for (const job of data) {
+    const content = emailContent(job);
     let delivery: Delivery;
     if (!job.email) {
       delivery = { status: "skipped", last_error: "recipient_or_event_ineligible" };
     } else if (!mailboxPattern.test(job.email)) {
       delivery = { status: "failed", last_error: "invalid_recipient_address" };
+    } else if (!content) {
+      delivery = { status: "failed", last_error: "missing_vaccination_details" };
     } else {
-      const raw = encodeEmail(job, from, job.email);
+      const raw = encodeEmail(job, content, from, job.email);
       const { data: started, error: startError } = await supabase.rpc("start_owner_notification_send", {
         p_id: job.id,
         p_claim_token: job.claim_token,
