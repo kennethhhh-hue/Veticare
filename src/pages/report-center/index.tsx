@@ -238,12 +238,6 @@ const Reports = () => {
     if (downloaded) toast.success("Live report generated and saved.", { description: `${periodRows.length} rows • ${reportId}` });
   };
 
-  const downloadCenter = () => {
-    const rows = reports.map((report) => ({ id: report.report_id, name: report.name, category: report.category, period: report.period, generated: report.generated_at, rows: report.row_count, format: report.format, status: report.status, author: report.author_name }));
-    if (downloadCsv("veticare-report-library.csv", rows)) toast.success("Report library exported.");
-    else toast.info("No generated reports to export.");
-  };
-
   const downloadReport = (report: GeneratedReport) => {
     const reportRows = toCsvRows(report.report_data);
     if (downloadCsv(`${report.report_id.toLowerCase()}-${report.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.csv`, reportRows)) {
@@ -290,16 +284,6 @@ const Reports = () => {
         eyebrow="Insights"
         title="Reports"
         description="Generate CSV reports from live registry, shelter, adoption and audit data."
-        actions={
-          <Button
-            variant="outline"
-            onClick={downloadCenter}
-            className="h-9 rounded-xl border-border bg-card text-[12px] font-bold"
-          >
-            <Download className="size-4" />
-            Download center
-          </Button>
-        }
       />
 
       <MetricStrip metrics={metrics} />
